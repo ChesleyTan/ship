@@ -10,6 +10,7 @@
 #define PROMPT_MAX_SIZE 1024
 
 const char *cmd_exit = "exit";
+const char *cmd_cd = "cd";
 char *prompt;
 
 int main() {
@@ -70,12 +71,16 @@ int main() {
         }
         printf("~~~~~~~~~~~~~~~~\n");
         if (strcmp(opts[0], cmd_exit) == 0) {
-            exit(0); 
+	  exit(0); 
         }
+	if (strcmp(opts[0], cmd_cd) == 0){
+	  
+	  chdir(opts[1]);
+	}
         // Execution
         int child_pid = fork();
         if (!child_pid) {
-            printf("I'm here! Woohoo!");
+	  
             execvp(opts[0], opts);
             // Note: child automatically exits after execvp, but we'll
             // explicitly call exit just in case
