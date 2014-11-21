@@ -1,5 +1,9 @@
 // TODO dynamically allocated cwd size?
 // TODO expand ~ in command line to $HOME
+// TODO implement parsing of \ escape characters
+// TODO implement proper use of quotation marks
+// TODO command history
+// TODO tab completion
 #include "shell.h"
 
 void print_error() {
