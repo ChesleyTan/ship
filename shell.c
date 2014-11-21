@@ -145,8 +145,10 @@ int main() {
         }
         // Free dynamically allocated memory
         free(prompt);
-        for (;optCount >= 0;--optCount) {
-            free(opts[optCount]);
+        if (optCount > 0) {
+            for (;optCount >= 0;--optCount) {
+                free(opts[optCount]);
+            }
         }
         free(opts);
         free(tok);
