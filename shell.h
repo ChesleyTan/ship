@@ -7,6 +7,8 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/types.h>
+#include <pwd.h>
 
 // Constants
 #define INPUT_BUF_SIZE 256
@@ -30,6 +32,8 @@ const char *fg_green = "38;5;34m";
 
 // Function type signatures
 void print_error();
+char *get_user();
+char *get_uid_symbol();
 char *get_time_str();
 void abbreviate_home(char *, const char *, size_t);
 

@@ -8,6 +8,24 @@ void print_error() {
     }
 }
 
+char *get_user() {
+    uid_t uid = geteuid();
+    struct passwd *passwd = getpwuid(uid);
+    if (passwd) {
+        return passwd->pw_name;
+    }
+    return "Anon";
+}
+
+char *get_uid_symbol() {
+    if (getuid() != 0) {
+        return "$";
+    }
+    else {
+        return "#";
+    }
+}
+
 char *get_time_str() {
     time_t rawtime;
     time(&rawtime);
@@ -55,7 +73,7 @@ int main() {
         // Generate prompt
         abbreviate_home(cwd, home, sizeof(cwd));
         char *time_str = get_time_str();
-        sprintf(prompt, "%s%s[%s]%s %s%s%s%s\n%s%s>>%s ", bold_prefix, fg_red_160, time_str, reset, bold_prefix, fg_blue_39, cwd, reset, bold_prefix, fg_white, reset);
+        sprintf(prompt, "%s%s[%s]%s %s%s%s:%s%s%s%s%s %s%s%s%s\n%s%s>>%s ", bold_prefix, fg_red_160, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_39, cwd, reset, bold_prefix, fg_white, get_uid_symbol(), reset, bold_prefix, fg_green, reset);
         free(time_str);
         printf("%s", prompt);
 
