@@ -152,10 +152,15 @@ int main() {
                 exit(0);
             }
             else if (strcmp(opts[0], cmd_cd) == 0){
-                if (chdir(opts[1]) < 0) { // Returns -1 if error
-                    print_error();
-                }
-            }
+	      if (opts[1] == NULL) {
+		if (chdir(home) < 0) { // Returns -1 if error
+		    print_error();
+		}
+	      }
+	      else if (chdir(opts[1]) < 0) { // Returns -1 if error
+		print_error();
+	      }
+	    }
             else {
                 // Execution
                 int child_pid = fork();
