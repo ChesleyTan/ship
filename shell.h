@@ -34,8 +34,8 @@ const char *fg_green = "38;5;34m";
 // Function type signatures
 void print_error();
 char *get_user();
-char *get_uid_symbol();
-char *get_time_str();
+char *get_uid_symbol(char *);
+char *get_time_str(char *);
 void abbreviate_home(char *, const char *, size_t);
 void trim_whitespace(char *);
 

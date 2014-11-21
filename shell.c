@@ -21,33 +21,29 @@ char *get_user() {
     return "Anon";
 }
 
-// TODO take dynamically allocated string as input
-char *get_uid_symbol() {
+char *get_uid_symbol(char *uid_symbol_container) {
     const char non_root = '$';
     const char root = '#';
-    char *symbol = (char *) calloc(sizeof(char), 20);
     if (getuid() != 0) {
-        sprintf(symbol, "%s%s%c%s", bold_prefix, fg_white, non_root, reset);
-        return symbol;
+        sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_white, non_root, reset);
+        return uid_symbol_container;
     }
     else {
-        sprintf(symbol, "%s%s%c%s", bold_prefix, fg_red_9, root, reset);
-        return symbol;
+        sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_red_9, root, reset);
+        return uid_symbol_container;
     }
 }
 
-// TODO take dynamically allocated string as input
-char *get_time_str() {
+char *get_time_str(char *time_str_container) {
     time_t rawtime;
     time(&rawtime);
     struct tm *time = localtime(&rawtime);
-    char *time_str = (char *) malloc(DATE_MAX_SIZE);
     // TODO size check
     // Pad integer with zeroes to a length of 2
-    if (sprintf(time_str, "%'02d:%'02d:%'02d", time->tm_hour, time->tm_min, time->tm_sec) < 0) {
+    if (sprintf(time_str_container, "%'02d:%'02d:%'02d", time->tm_hour, time->tm_min, time->tm_sec) < 0) {
         printf("[Error]: Error formatting time string.");
     }
-    return time_str;
+    return time_str_container;
 }
 
 void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_length) {
@@ -102,8 +98,10 @@ int main() {
         }
         // Generate prompt
         abbreviate_home(cwd, home, sizeof(cwd));
-        char *time_str = get_time_str();
-        char *uid_symbol = get_uid_symbol();
+        char *time_str = (char *) malloc (DATE_MAX_SIZE);
+        get_time_str(time_str);
+        char *uid_symbol = (char *) calloc(sizeof(char), 20);
+        get_uid_symbol(uid_symbol);
         snprintf(prompt, PROMPT_MAX_SIZE, "%s%s[%s]%s %s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_9, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
         free(uid_symbol);
         free(time_str);
