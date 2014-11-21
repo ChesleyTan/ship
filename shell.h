@@ -37,4 +37,5 @@ char *get_user();
 char *get_uid_symbol();
 char *get_time_str();
 void abbreviate_home(char *, const char *, size_t);
+void trim_whitespace(char *);
 

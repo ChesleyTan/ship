@@ -21,6 +21,7 @@ char *get_user() {
     return "Anon";
 }
 
+// TODO take dynamically allocated string as input
 char *get_uid_symbol() {
     const char non_root = '$';
     const char root = '#';
@@ -35,6 +36,7 @@ char *get_uid_symbol() {
     }
 }
 
+// TODO take dynamically allocated string as input
 char *get_time_str() {
     time_t rawtime;
     time(&rawtime);
@@ -60,6 +62,25 @@ void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_len
         trunc_path[path_size - 1] = '\0';
         strncpy(full_path, trunc_path, full_path_length);
         free(trunc_path);
+    }
+}
+
+void trim_whitespace(char *input) {
+    // TODO trim trailing whitespace
+    int i = 0;
+    // Count number of preceding whitespace
+    int num_preceding_whitespace = 0;
+    while (input[i] && input[i] == ' ') {
+        ++num_preceding_whitespace;
+        ++i;
+    }
+    // Trim preceding whitespace
+    i = 0;
+    if (num_preceding_whitespace > 0) {
+        while(input[i]) {
+            input[i] = input[i + num_preceding_whitespace];
+            ++i;
+        }
     }
 }
 
@@ -94,6 +115,8 @@ int main() {
         }
         // Parse input
         int i = 0, optCount = 0, tokIndex = 0;
+        // Trim whitespace
+        trim_whitespace(input);
         // Iterate through each char of input
         while (input[i]) {
             if (input[i] != '\n') {
