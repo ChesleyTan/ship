@@ -55,7 +55,7 @@ int main() {
         // Generate prompt
         abbreviate_home(cwd, home, sizeof(cwd));
         char *time_str = get_time_str();
-        sprintf(prompt, "[%s] %s: ", time_str, cwd);
+        sprintf(prompt, "%s%s[%s]%s %s%s%s%s\n%s%s>>%s ", bold_prefix, fg_red_160, time_str, reset, bold_prefix, fg_blue_39, cwd, reset, bold_prefix, fg_white, reset);
         free(time_str);
         printf("%s", prompt);
 
