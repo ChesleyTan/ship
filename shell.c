@@ -1,101 +1,156 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
+// TODO dynamically allocated cwd size?
+// TODO expand ~ in command line to $HOME
+#include "shell.h"
 
-#define PROMPT_MAX_SIZE 1024
+void print_error() {
+    if (errno) {
+        printf("[Error %d]: %s\n", errno, strerror(errno));
+    }
+}
 
-const char *cmd_exit = "exit";
-const char *cmd_cd = "cd";
-char *prompt;
+char *get_time_str() {
+    time_t rawtime;
+    time(&rawtime);
+    struct tm *time = localtime(&rawtime);
+    char *time_str = (char *) malloc(DATE_MAX_SIZE);
+    // TODO size check
+    // Pad integer with zeroes to a length of 2
+    if (sprintf(time_str, "%'02d:%'02d:%'02d", time->tm_hour, time->tm_min, time->tm_sec) < 0) {
+        printf("[Error]: Error formatting time string.");
+    }
+    return time_str;
+}
+
+void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_length) {
+    // Replace $HOME with ~ in full_path
+    char *match = strstr(full_path, home_dir);
+    if (match != NULL) {
+        int path_size = (strlen(match) - strlen(home_dir) + 2);
+        char *trunc_path = (char *) malloc(path_size * sizeof(char *));
+        trunc_path[0] = '~';
+        trunc_path[1] = '\0';
+        trunc_path = strncat(trunc_path, (char *) &match[strlen(home_dir)], path_size - 2);
+        trunc_path[path_size - 1] = '\0';
+        strncpy(full_path, trunc_path, full_path_length);
+        free(trunc_path);
+    }
+}
 
 int main() {
+    // TODO allow for possible changing home dir
     const char *home = getenv("HOME");
-    char cwd[768];
-    prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char *));
-    char *input = (char *)malloc(sizeof(char *));
-    char **opts = (char **)malloc(sizeof(char **));
-    char *tok = (char *)malloc(sizeof(char *));
     while (1) {
-        // TODO error checking for cwd
-        getcwd(cwd, sizeof(cwd));
-        strncpy(prompt, cwd, sizeof(cwd));
-        // Read input
-        int i = 0, optCount = 0, tokIndex = 0;
-        char *match = strstr(prompt, home);
-        // Replace $HOME with ~
-        if (match != NULL) {
-            char *trunc_path = (char *) malloc((strlen(match) + 1) * sizeof(char *));
-            trunc_path[0] = '~';
-            trunc_path = strcat(trunc_path, (char *) &match[strlen(home)]);
-            strcpy(prompt, trunc_path);
+        // Initializations
+        char cwd[768];
+        cwd[768] = '\0';
+        char input[INPUT_BUF_SIZE];
+        char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char *));
+        char **opts = (char **) malloc(sizeof(char *));
+        char *tok = (char *) malloc(sizeof(char));
+
+        // Get cwd
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+            print_error();
         }
-        printf("%s: ", prompt);
-        // Read 255 bytes from stdin
-        fgets(input, 256, stdin);
+        // Generate prompt
+        abbreviate_home(cwd, home, sizeof(cwd));
+        char *time_str = get_time_str();
+        sprintf(prompt, "[%s] %s: ", time_str, cwd);
+        free(time_str);
+        printf("%s", prompt);
+
+        // Read INPUT_BUF_SIZE - 1 bytes from stdin
+        if (fgets(input, INPUT_BUF_SIZE, stdin) == NULL) {
+            printf("[Error]: fgets error");
+        }
+        // Parse input
+        int i = 0, optCount = 0, tokIndex = 0;
         // Iterate through each char of input
         while (input[i]) {
-            // Copy char to var tok
-            tok[tokIndex] = input[i];
+            if (input[i] != '\n') {
+                // Copy char to var tok
+                tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+                tok[tokIndex] = input[i];
+                tok[tokIndex + 1] = '\0';
+            }
             // Case when we've reached the end of a word
             if (input[i] == ' ') {
-                opts[optCount] = (char *) malloc(sizeof(char *));
+                // Add null terminator, replacing the space
+                tok[tokIndex] = '\0';
+                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
                 // Copy token to opts array
-                strncpy(opts[optCount], tok, tokIndex);
+                opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+                strncpy(opts[optCount], tok, tokIndex + 1);
                 // Reset tokIndex to 0
-                tokIndex = 0; 
-                // Increment optCount to keep track of num of opts 
-                optCount++;
+                tokIndex = 0;
+                // Increment optCount to keep track of num of opts
+                ++optCount;
             }
             else {
-                tokIndex++;
+                ++tokIndex;
             }
-            i++;
+            ++i;
         }
-        // Add last opt to opts array
-        opts[optCount] = (char *) malloc(sizeof(char *));
-        strncpy(opts[optCount], tok, tokIndex - 1);
-        // Increment optCount counter
-        optCount++;
-        // Add required NULL argument for exec
-        opts[optCount] = NULL;
-        printf("cmd: %s\n", opts[0]);
-        int u = 0;
-        while (u <= optCount) {
-            printf("opts[%d]: %s\n", u, opts[u]);
-            u++;
+        if (i > 1) {
+            // Add last opt to opts array
+            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+            opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+            // Copy token to opts and add null terminator
+            strncpy(opts[optCount], tok, strlen(tok));
+            opts[optCount][strlen(tok)] = '\0';
+            // Increment optCount counter
+            ++optCount;
+            // Add required NULL argument for exec
+            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+            opts[optCount] = (char *) malloc(sizeof(char));
+            opts[optCount] = NULL;
+            printf("cmd: %s\n", opts[0]);
+            int u = 0;
+            while (u <= optCount) {
+                printf("opts[%d]: %s$\n", u, opts[u]);
+                ++u;
+            }
+            printf("<~~~~~~~~ Output ~~~~~~~~>\n");
+            if (strcmp(opts[0], cmd_exit) == 0) {
+                printf("Exiting...\n");
+                // Free dynamically allocated memory before exiting
+                free(prompt);
+                for (;optCount >= 0;--optCount) {
+                    free(opts[optCount]);
+                }
+                free(opts);
+                free(tok);
+                exit(0);
+            }
+            else if (strcmp(opts[0], cmd_cd) == 0){
+                if (chdir(opts[1]) < 0) { // Returns -1 if error
+                    print_error();
+                }
+            }
+            else {
+                // Execution
+                int child_pid = fork();
+                if (!child_pid) {
+                    if (execvp(opts[0], opts) < 0) { // Returns -1 if error
+                        print_error();
+                    }
+                    // Note: child automatically exits after successful execvp
+                    exit(0);
+                }
+                else {
+                    int status;
+                    wait(&status);
+                }
+            }
         }
-        printf("~~~~~~~~~~~~~~~~\n");
-        if (strcmp(opts[0], cmd_exit) == 0) {
-	  exit(0); 
+        // Free dynamically allocated memory
+        free(prompt);
+        for (;optCount >= 0;--optCount) {
+            free(opts[optCount]);
         }
-	if (strcmp(opts[0], cmd_cd) == 0){
-	  
-	  chdir(opts[1]);
-	}
-        // Execution
-        int child_pid = fork();
-        if (!child_pid) {
-	  
-            execvp(opts[0], opts);
-            // Note: child automatically exits after execvp, but we'll
-            // explicitly call exit just in case
-            exit(0);
-        }
-        else {
-            int status;
-            wait(&status);
-        }
-        if (errno) {
-            printf("[Error %d]: %s\n", errno, strerror(errno));
-        }
+        free(opts);
+        free(tok);
     }
-    free(input);
-    free(opts);
-    free(tok);
     return 0;
 }
+
