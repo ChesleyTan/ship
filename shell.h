@@ -36,10 +36,12 @@ const char *fg_bright_green = "38;5;118m";
 const char *fg_green = "38;5;34m";
 
 // Function type signatures
-static void sighandler(int);
+static void sighandler(int signo);
 void print_error();
 char *get_user();
-char *get_uid_symbol(char *);
-char *get_time_str(char *);
-void abbreviate_home(char *, const char *, size_t);
+char *get_uid_symbol(char *uid_symbol_container);
+char *get_time_str(char *time_str_container);
+void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_length);
+void execute(char **opts, int optCount, char *tok, char *prompt, const char *home);
+void free_all(char **opts, int optCount, char *tok, char *prompt);
 
