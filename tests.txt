@@ -1,2 +1,3 @@
        ls   -ahl        --color     ~  
+       ls -ahl --color ~;cat ~/.zshrc 
 

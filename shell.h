@@ -42,7 +42,7 @@ char *get_user();
 char *get_uid_symbol(char *uid_symbol_container);
 char *get_time_str(char *time_str_container);
 void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_length);
-void execute(char **opts, int optCount, char *tok, char *prompt, const char *home);
-void free_all(char **opts, int optCount, char *tok, char *prompt);
-void get_prompt(char *prompt, int prompt_max_size, const char *home);
+void execute(char **opts, int optCount, char *tok);
+void free_all(char **opts, int optCount, char *tok);
+void get_prompt(char *prompt, int prompt_max_size);
 

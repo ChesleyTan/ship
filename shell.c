@@ -1,5 +1,4 @@
 // TODO dynamically allocated cwd size?
-// TODO SIGINT to kill child processes
 // TODO implement proper use of quotation marks -> ignore quotes and ignore spaces in quotes
 // TODO git prompt
 // TODO command history
@@ -9,6 +8,9 @@
 
 char cmd_error = FALSE;
 int child_pid;
+const char *home;
+char input[INPUT_BUF_SIZE];
+char *prompt;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -24,7 +26,7 @@ static void sighandler(int signo) {
             // Re-display prompt
             char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
             const char *home = getenv("HOME");
-            get_prompt(prompt, PROMPT_MAX_SIZE, home);
+            get_prompt(prompt, PROMPT_MAX_SIZE);
             write(STDOUT_FILENO, "\n", 1);
             write(STDOUT_FILENO, prompt, strlen(prompt));
             free(prompt);
@@ -92,7 +94,7 @@ void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_len
     }
 }
 
-void execute(char **opts, int optCount, char *tok, char *prompt, const char *home) {
+void execute(char **opts, int optCount, char *tok) {
     if (optCount <= 0) {
         return;
     }
@@ -109,7 +111,7 @@ void execute(char **opts, int optCount, char *tok, char *prompt, const char *hom
     // Handle built-in commands
     if (strcmp(opts[0], cmd_exit) == 0) {
         printf("Exiting...\n");
-        free_all(opts, optCount, tok, prompt);
+        free_all(opts, optCount, tok);
         exit(0);
     }
     else if (strcmp(opts[0], cmd_cd) == 0){
@@ -143,7 +145,7 @@ void execute(char **opts, int optCount, char *tok, char *prompt, const char *hom
     }
 }
 
-void free_all(char **opts, int optCount, char *tok, char *prompt) {
+void free_all(char **opts, int optCount, char *tok) {
     // Free dynamically allocated memory
     free(prompt);
     if (optCount > 0) {
@@ -155,7 +157,7 @@ void free_all(char **opts, int optCount, char *tok, char *prompt) {
     free(tok);
 }
 
-void get_prompt(char *prompt, int prompt_max_size, const char *home) {
+void get_prompt(char *prompt, int prompt_max_size) {
     char cwd[768];
     cwd[767] = '\0';
     // Get cwd
@@ -173,20 +175,127 @@ void get_prompt(char *prompt, int prompt_max_size, const char *home) {
     free(time_str);
 }
 
+void parse_input(char input[INPUT_BUF_SIZE]) {
+    // Initializations
+    char **opts = (char **) malloc(sizeof(char *));
+    char *tok = (char *) malloc(sizeof(char));
+    tok[0] = '\0';
+    int i = 0, optCount = 0, tokIndex = 0;
+    // Iterate through each char of input
+    while (input[i]) {
+        if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
+            // Handle escape characters
+            if (input[i] == '\\') {
+                // Add char that follows the escape char to token
+                tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+                tok[tokIndex] = input[++i]; // Advance past next index in input
+                tok[++tokIndex] = '\0';
+            }
+            // Handle semicolons (multiple commands separator)
+            else if (input[i] == ';') {
+                // Execute commands as we parse input
+                // Add last opt to opts array
+                if (tok[0] != '\0') { // Make sure an argument exists to add
+                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                    opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+                    // Copy token to opts and add null terminator
+                    strncpy(opts[optCount], tok, strlen(tok));
+                    opts[optCount][strlen(tok)] = '\0';
+                    // Increment optCount counter
+                    ++optCount;
+                }
+
+                // Add required NULL argument for exec
+                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                opts[optCount] = NULL;
+
+                execute(opts, optCount, tok);
+                // Reset tok
+                tok[0] = '\0';
+                // Reset tokIndex
+                tokIndex = 0;
+                // Reset opts
+                if (optCount > 0) {
+                    for (;optCount >= 0;--optCount) {
+                        free(opts[optCount]);
+                    }
+                }
+                free(opts);
+                // Reinstantiate opts
+                opts = (char **) malloc(sizeof(char *));
+                // Reset optCount
+                optCount = 0;
+            }
+            // Substitute ~ with $HOME, if applicable
+            else if (input[i] == '~') {
+                // Allocate memory for $HOME in tok
+                tok = (char *) realloc(tok, (tokIndex + strlen(home) + 1) * sizeof(char));
+                // Add $HOME to token
+                tok = strcat(tok, home);
+                // Add null terminator
+                tok[tokIndex + strlen(home)] = '\0';
+                // Update tokIndex
+                tokIndex += strlen(home);
+            }
+            // Copy char to var tok
+            else {
+                tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+                tok[tokIndex] = input[i];
+                tok[++tokIndex] = '\0';
+            }
+        }
+        // Case when we've reached the end of a word
+        // tokIndex != 0 ensures that there is non-whitespace preceding this space
+        else if (input[i] == ' ' && tokIndex != 0) {
+            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+            // Copy token to opts array
+            opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+            strncpy(opts[optCount], tok, tokIndex + 1);
+            // Reset tok
+            tok[0] = '\0';
+            // Reset tokIndex to 0
+            tokIndex = 0;
+            // Increment optCount to keep track of num of opts
+            ++optCount;
+        }
+        ++i;
+    }
+    cmd_error = FALSE; // Reset the error flag
+    // If a command was supplied, then try to execute it
+    // !(optCount == 0 && tokIndex == 0) ensures that there was
+    // at least one non-whitespace character in the input
+    if (i > 1 && !(optCount == 0 && tokIndex == 0)) {
+        // Add last opt to opts array
+        if (tok[0] != '\0') { // Make sure an argument exists to add
+            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+            opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+            // Copy token to opts and add null terminator
+            strncpy(opts[optCount], tok, strlen(tok));
+            opts[optCount][strlen(tok)] = '\0';
+            // Increment optCount counter
+            ++optCount;
+        }
+
+        // Add required NULL argument for exec
+        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+        opts[optCount] = NULL;
+
+        execute(opts, optCount, tok);
+
+    }
+    free_all(opts, optCount, tok);
+}
+
 int main() {
     signal(CMD_ERROR_SIGNAL, sighandler);
     signal(SIGINT, sighandler);
     // TODO allow for possible changing home dir
-    const char *home = getenv("HOME");
+    home = getenv("HOME");
     while (!feof(stdin)) {
         // Initializations
-        char input[INPUT_BUF_SIZE];
-        char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
-        char **opts = (char **) malloc(sizeof(char *));
-        char *tok = (char *) malloc(sizeof(char));
-        tok[0] = '\0';
+        prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
 
-        get_prompt(prompt, PROMPT_MAX_SIZE, home);
+        get_prompt(prompt, PROMPT_MAX_SIZE);
         printf("%s", prompt);
 
         // Read INPUT_BUF_SIZE - 1 bytes from stdin
@@ -194,111 +303,8 @@ int main() {
             printf("\n[Reached EOF]\n");
             exit(0);
         }
-        // Parse input
-        int i = 0, optCount = 0, tokIndex = 0;
-        // Iterate through each char of input
-        while (input[i]) {
-            if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
-                // Handle escape characters
-                if (input[i] == '\\') {
-                    // Add char that follows the escape char to token
-                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                    tok[tokIndex] = input[++i]; // Advance past next index in input
-                    tok[++tokIndex] = '\0';
-                }
-                // Handle semicolons (multiple commands separator)
-                else if (input[i] == ';') {
-                    // Execute commands as we parse input
-                    // Add last opt to opts array
-                    if (tok[0] != '\0') { // Make sure an argument exists to add
-                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                        opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                        // Copy token to opts and add null terminator
-                        strncpy(opts[optCount], tok, strlen(tok));
-                        opts[optCount][strlen(tok)] = '\0';
-                        // Increment optCount counter
-                        ++optCount;
-                    }
 
-                    // Add required NULL argument for exec
-                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                    opts[optCount] = NULL;
-
-                    execute(opts, optCount, tok, prompt, home);
-                    // Reset tok
-                    tok[0] = '\0';
-                    // Reset tokIndex
-                    tokIndex = 0;
-                    // Reset opts
-                    if (optCount > 0) {
-                        for (;optCount >= 0;--optCount) {
-                            free(opts[optCount]);
-                        }
-                    }
-                    free(opts);
-                    // Reinstantiate opts
-                    opts = (char **) malloc(sizeof(char *));
-                    // Reset optCount
-                    optCount = 0;
-                }
-                // Substitute ~ with $HOME, if applicable
-                else if (input[i] == '~') {
-                    // Allocate memory for $HOME in tok
-                    tok = (char *) realloc(tok, (tokIndex + strlen(home) + 1) * sizeof(char));
-                    // Add $HOME to token
-                    tok = strcat(tok, home);
-                    // Add null terminator
-                    tok[tokIndex + strlen(home)] = '\0';
-                    // Update tokIndex
-                    tokIndex += strlen(home);
-                }
-                // Copy char to var tok
-                else {
-                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                    tok[tokIndex] = input[i];
-                    tok[++tokIndex] = '\0';
-                }
-            }
-            // Case when we've reached the end of a word
-            // tokIndex != 0 ensures that there is non-whitespace preceding this space
-            else if (input[i] == ' ' && tokIndex != 0) {
-                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                // Copy token to opts array
-                opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                strncpy(opts[optCount], tok, tokIndex + 1);
-                // Reset tok
-                tok[0] = '\0';
-                // Reset tokIndex to 0
-                tokIndex = 0;
-                // Increment optCount to keep track of num of opts
-                ++optCount;
-            }
-            ++i;
-        }
-        cmd_error = FALSE; // Reset the error flag
-        // If a command was supplied, then try to execute it
-        // !(optCount == 0 && tokIndex == 0) ensures that there was
-        // at least one non-whitespace character in the input
-        if (i > 1 && !(optCount == 0 && tokIndex == 0)) {
-            // Add last opt to opts array
-            if (tok[0] != '\0') { // Make sure an argument exists to add
-                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                // Copy token to opts and add null terminator
-                strncpy(opts[optCount], tok, strlen(tok));
-                opts[optCount][strlen(tok)] = '\0';
-                // Increment optCount counter
-                ++optCount;
-            }
-
-            // Add required NULL argument for exec
-            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-            opts[optCount] = NULL;
-
-            execute(opts, optCount, tok, prompt, home);
-
-        }
-        free_all(opts, optCount, tok, prompt);
+        parse_input(input);
     }
     return 0;
 }
