@@ -1,16 +1,34 @@
 // TODO dynamically allocated cwd size?
 // TODO SIGINT to kill child processes
-// TODO parsing of ;
-// TODO implement proper use of quotation marks
+// TODO implement proper use of quotation marks -> ignore quotes and ignore spaces in quotes
+// TODO git prompt
 // TODO command history
 // TODO tab completion
+// TODO redirection
 #include "shell.h"
 
 char cmd_error = FALSE;
+int child_pid;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
         cmd_error = TRUE;
+    }
+    else if (signo == SIGINT) {
+        if (child_pid) {
+            kill(child_pid, SIGINT);
+        }
+        // If no child process or child process killed
+        if (!child_pid || kill(child_pid, 0) < 0) { // Returns -1 on error
+            // TODO make this async-safe
+            // Re-display prompt
+            char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
+            const char *home = getenv("HOME");
+            get_prompt(prompt, PROMPT_MAX_SIZE, home);
+            write(STDOUT_FILENO, "\n", 1);
+            write(STDOUT_FILENO, prompt, strlen(prompt));
+            free(prompt);
+        }
     }
 }
 
@@ -108,7 +126,7 @@ void execute(char **opts, int optCount, char *tok, char *prompt, const char *hom
     }
     else {
         // Fork to execute command
-        int child_pid = fork();
+        child_pid = fork();
         if (!child_pid) {
             if (execvp(opts[0], opts) < 0) { // Returns -1 if error
                 print_error();
@@ -157,12 +175,13 @@ void get_prompt(char *prompt, int prompt_max_size, const char *home) {
 
 int main() {
     signal(CMD_ERROR_SIGNAL, sighandler);
+    signal(SIGINT, sighandler);
     // TODO allow for possible changing home dir
     const char *home = getenv("HOME");
     while (!feof(stdin)) {
         // Initializations
         char input[INPUT_BUF_SIZE];
-        char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char *));
+        char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
         char **opts = (char **) malloc(sizeof(char *));
         char *tok = (char *) malloc(sizeof(char));
         tok[0] = '\0';
