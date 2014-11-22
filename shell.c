@@ -75,6 +75,10 @@ void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_len
 }
 
 void execute(char **opts, int optCount, char *tok, char *prompt, const char *home) {
+    if (optCount <= 0) {
+        return;
+    }
+
     // Debug info
     printf("cmd: %s\n", opts[0]);
     int u = 0;
@@ -183,6 +187,41 @@ int main() {
                     tok[tokIndex] = input[++i]; // Advance past next index in input
                     tok[++tokIndex] = '\0';
                 }
+                // Handle semicolons (multiple commands separator)
+                else if (input[i] == ';') {
+                    // Execute commands as we parse input
+                    // Add last opt to opts array
+                    if (tok[0] != '\0') { // Make sure an argument exists to add
+                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                        opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+                        // Copy token to opts and add null terminator
+                        strncpy(opts[optCount], tok, strlen(tok));
+                        opts[optCount][strlen(tok)] = '\0';
+                        // Increment optCount counter
+                        ++optCount;
+                    }
+
+                    // Add required NULL argument for exec
+                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                    opts[optCount] = NULL;
+
+                    execute(opts, optCount, tok, prompt, home);
+                    // Reset tok
+                    tok[0] = '\0';
+                    // Reset tokIndex
+                    tokIndex = 0;
+                    // Reset opts
+                    if (optCount > 0) {
+                        for (;optCount >= 0;--optCount) {
+                            free(opts[optCount]);
+                        }
+                    }
+                    free(opts);
+                    // Reinstantiate opts
+                    opts = (char **) malloc(sizeof(char *));
+                    // Reset optCount
+                    optCount = 0;
+                }
                 // Substitute ~ with $HOME, if applicable
                 else if (input[i] == '~') {
                     // Allocate memory for $HOME in tok
@@ -208,7 +247,7 @@ int main() {
                 // Copy token to opts array
                 opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
                 strncpy(opts[optCount], tok, tokIndex + 1);
-                // Clear tok
+                // Reset tok
                 tok[0] = '\0';
                 // Reset tokIndex to 0
                 tokIndex = 0;
@@ -235,7 +274,6 @@ int main() {
 
             // Add required NULL argument for exec
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-            opts[optCount] = (char *) malloc(sizeof(char));
             opts[optCount] = NULL;
 
             execute(opts, optCount, tok, prompt, home);
