@@ -1,5 +1,5 @@
 // TODO dynamically allocated cwd size?
-// TODO expand ~ in command line to $HOME
+// TODO SIGINT to kill child processes
 // TODO implement parsing of \ escape characters
 // TODO implement proper use of quotation marks
 // TODO command history
@@ -78,7 +78,7 @@ int main() {
     signal(CMD_ERROR_SIGNAL, sighandler);
     // TODO allow for possible changing home dir
     const char *home = getenv("HOME");
-    while (1) {
+    while (!feof(stdin)) {
         // Initializations
         char cwd[768];
         cwd[767] = '\0';
@@ -86,6 +86,7 @@ int main() {
         char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char *));
         char **opts = (char **) malloc(sizeof(char *));
         char *tok = (char *) malloc(sizeof(char));
+        tok[0] = '\0';
 
         // Get cwd
         if (getcwd(cwd, sizeof(cwd)) == NULL) {
@@ -104,18 +105,32 @@ int main() {
 
         // Read INPUT_BUF_SIZE - 1 bytes from stdin
         if (fgets(input, INPUT_BUF_SIZE, stdin) == NULL) {
-            printf("[Error]: fgets error");
+            printf("\n[Reached EOF]\n");
+            exit(0);
         }
         // Parse input
         int i = 0, optCount = 0, tokIndex = 0;
         // Iterate through each char of input
         while (input[i]) {
             if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
+                // Substitute ~ with $HOME, if applicable
+                if (input[i] == '~') {
+                    // Allocate memory for $HOME in tok
+                    tok = (char *) realloc(tok, (tokIndex + strlen(home) + 1) * sizeof(char));
+                    // Add $HOME to token
+                    tok = strcat(tok, home);
+                    // Add null terminator
+                    tok[tokIndex + strlen(home)] = '\0';
+                    // Update tokIndex
+                    tokIndex += strlen(home);
+                }
                 // Copy char to var tok
-                tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                tok[tokIndex] = input[i];
-                tok[tokIndex + 1] = '\0';
-                ++tokIndex;
+                else {
+                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+                    tok[tokIndex] = input[i];
+                    tok[tokIndex + 1] = '\0';
+                    ++tokIndex;
+                }
             }
             // Case when we've reached the end of a word
             // tokIndex != 0 ensures that there is non-whitespace preceding this space
