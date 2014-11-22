@@ -10,6 +10,8 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <signal.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 // Constants
 #define INPUT_BUF_SIZE 256
@@ -18,10 +20,12 @@
 #define TRUE 1
 #define FALSE 0
 #define CMD_ERROR_SIGNAL SIGUSR1
+#define DIR_NAME_MAX_SIZE 768
 
 // Shell built-in functions
 const char *cmd_exit = "exit";
 const char *cmd_cd = "cd";
+const char *cmd_back = "back";
 
 // ANSI Escape codes
 const char *reset = "\e[0m";
@@ -38,6 +42,8 @@ const char *fg_green = "38;5;34m";
 // Function type signatures
 static void sighandler(int signo);
 void print_error();
+void cd(const char *target);
+void cd_back();
 char *get_user();
 char *get_uid_symbol(char *uid_symbol_container);
 char *get_time_str(char *time_str_container);

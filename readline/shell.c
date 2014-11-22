@@ -2,10 +2,8 @@
 // TODO implement proper use of quotation marks -> ignore quotes and ignore spaces in quotes
 // TODO git prompt
 // TODO command tab-completion
-// TODO command history
 // TODO redirection
 #include "shell.h"
-#include <readline/readline.h>
 
 char cmd_error = FALSE;
 int child_pid;
@@ -15,6 +13,7 @@ char *prompt;
 char **opts;
 char *tok;
 int optCount;
+char old_pwd[DIR_NAME_MAX_SIZE];
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -42,6 +41,26 @@ void print_error() {
     if (errno) {
         printf("[Error %d]: %s\n", errno, strerror(errno));
     }
+}
+
+void cd(const char *target) {
+    // Duplicate the target; if the target points to old_pwd, we
+    // don't want to overwrite the old_pwd
+    char dup_target[DIR_NAME_MAX_SIZE];
+    strncpy(dup_target, target, sizeof(dup_target));
+    // Store the previous old_pwd in case chdir fails and we have to revert
+    char prev_old_pwd[DIR_NAME_MAX_SIZE];
+    strncpy(prev_old_pwd, old_pwd, sizeof(prev_old_pwd));
+    getcwd(old_pwd, sizeof(old_pwd)); // Set the current dir as the new old_pwd
+    if (chdir(dup_target) < 0) { // Returns -1 if error
+        print_error();
+        cmd_error = TRUE;
+        strncpy(old_pwd, prev_old_pwd, sizeof(old_pwd)); // Restore previous old_pwd
+    }
+}
+
+void cd_back() {
+    cd(old_pwd);
 }
 
 char *get_user() {
@@ -120,15 +139,15 @@ void execute() {
     }
     else if (strcmp(opts[0], cmd_cd) == 0){
         if (opts[1] == NULL) {
-            if (chdir(home) < 0) { // Returns -1 if error
-                print_error();
-                cmd_error = TRUE;
-            }
+            // By default, cd to home if no directory specified
+            cd(home);
         }
-        else if (chdir(opts[1]) < 0) { // Returns -1 if error
-            print_error();
-            cmd_error = TRUE;
+        else {
+            cd(opts[1]);
         }
+    }
+    else if (strcmp(opts[0], cmd_back) == 0) {
+        cd_back();
     }
     else {
         // Fork to execute command
@@ -162,8 +181,8 @@ void free_all() {
 }
 
 void get_prompt(char *prompt, int prompt_max_size) {
-    char cwd[768];
-    cwd[767] = '\0';
+    char cwd[DIR_NAME_MAX_SIZE];
+    cwd[DIR_NAME_MAX_SIZE - 1] = '\0';
     // Get cwd
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
         print_error();
@@ -295,12 +314,12 @@ int main() {
     signal(SIGINT, sighandler);
     // TODO allow for possible changing home dir
     home = getenv("HOME");
+    getcwd(old_pwd, sizeof(old_pwd));
     while (!feof(stdin)) {
         // Initializations
         prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
 
         get_prompt(prompt, PROMPT_MAX_SIZE);
-        //printf("%s", prompt);
         char *line = readline(prompt);
         if (line == NULL) {
             printf("\n[Reached EOF]\n");
@@ -308,6 +327,7 @@ int main() {
             exit(0);
         }
         strncpy(input, line, INPUT_BUF_SIZE);
+        add_history(input);
         free(line);
         printf("input: %s\n", input);
 
