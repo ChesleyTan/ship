@@ -11,6 +11,9 @@ int child_pid;
 const char *home;
 char input[INPUT_BUF_SIZE];
 char *prompt;
+char **opts;
+char *tok;
+int optCount;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -79,22 +82,22 @@ char *get_time_str(char *time_str_container) {
     return time_str_container;
 }
 
-void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_length) {
+void abbreviate_home(char *full_path, size_t full_path_length) {
     // Replace $HOME with ~ in full_path
-    char *match = strstr(full_path, home_dir);
+    char *match = strstr(full_path, home);
     if (match != NULL) {
-        int path_size = (strlen(match) - strlen(home_dir) + 2);
+        int path_size = (strlen(match) - strlen(home) + 2);
         char *trunc_path = (char *) malloc(path_size * sizeof(char *));
         trunc_path[0] = '~';
         trunc_path[1] = '\0';
-        trunc_path = strncat(trunc_path, (char *) &match[strlen(home_dir)], path_size - 2);
+        trunc_path = strncat(trunc_path, (char *) &match[strlen(home)], path_size - 2);
         trunc_path[path_size - 1] = '\0';
         strncpy(full_path, trunc_path, full_path_length);
         free(trunc_path);
     }
 }
 
-void execute(char **opts, int optCount, char *tok) {
+void execute() {
     if (optCount <= 0) {
         return;
     }
@@ -111,7 +114,7 @@ void execute(char **opts, int optCount, char *tok) {
     // Handle built-in commands
     if (strcmp(opts[0], cmd_exit) == 0) {
         printf("Exiting...\n");
-        free_all(opts, optCount, tok);
+        free_all();
         exit(0);
     }
     else if (strcmp(opts[0], cmd_cd) == 0){
@@ -145,7 +148,7 @@ void execute(char **opts, int optCount, char *tok) {
     }
 }
 
-void free_all(char **opts, int optCount, char *tok) {
+void free_all() {
     // Free dynamically allocated memory
     free(prompt);
     if (optCount > 0) {
@@ -165,7 +168,7 @@ void get_prompt(char *prompt, int prompt_max_size) {
         print_error();
     }
     // Generate prompt
-    abbreviate_home(cwd, home, sizeof(cwd));
+    abbreviate_home(cwd, sizeof(cwd));
     char *time_str = (char *) malloc (DATE_MAX_SIZE);
     get_time_str(time_str);
     char *uid_symbol = (char *) calloc(sizeof(char), 20);
@@ -177,10 +180,11 @@ void get_prompt(char *prompt, int prompt_max_size) {
 
 void parse_input(char input[INPUT_BUF_SIZE]) {
     // Initializations
-    char **opts = (char **) malloc(sizeof(char *));
-    char *tok = (char *) malloc(sizeof(char));
+    opts = (char **) malloc(sizeof(char *));
+    tok = (char *) malloc(sizeof(char));
     tok[0] = '\0';
-    int i = 0, optCount = 0, tokIndex = 0;
+    optCount = 0;
+    int i = 0, tokIndex = 0;
     // Iterate through each char of input
     while (input[i]) {
         if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
@@ -209,7 +213,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
                 opts[optCount] = NULL;
 
-                execute(opts, optCount, tok);
+                execute();
                 // Reset tok
                 tok[0] = '\0';
                 // Reset tokIndex
@@ -280,10 +284,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
         opts[optCount] = NULL;
 
-        execute(opts, optCount, tok);
+        execute();
 
     }
-    free_all(opts, optCount, tok);
 }
 
 int main() {
@@ -305,6 +308,7 @@ int main() {
         }
 
         parse_input(input);
+        free_all();
     }
     return 0;
 }
