@@ -1,6 +1,7 @@
 // TODO dynamically allocated cwd size?
 // TODO SIGINT to kill child processes
-// TODO implement parsing of \ escape characters
+// TODO abstraction of sections in main()
+// TODO parsing of ;
 // TODO implement proper use of quotation marks
 // TODO command history
 // TODO tab completion
@@ -42,7 +43,7 @@ char *get_uid_symbol(char *uid_symbol_container) {
         return uid_symbol_container;
     }
     else {
-        sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_red_9, root, reset);
+        sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_red_196, root, reset);
         return uid_symbol_container;
     }
 }
@@ -98,7 +99,7 @@ int main() {
         get_time_str(time_str);
         char *uid_symbol = (char *) calloc(sizeof(char), 20);
         get_uid_symbol(uid_symbol);
-        snprintf(prompt, PROMPT_MAX_SIZE, "%s%s[%s]%s %s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_9, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
+        snprintf(prompt, PROMPT_MAX_SIZE, "%s%s[%s]%s %s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
         free(uid_symbol);
         free(time_str);
         printf("%s", prompt);
@@ -113,8 +114,15 @@ int main() {
         // Iterate through each char of input
         while (input[i]) {
             if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
+                // Handle escape characters
+                if (input[i] == '\\') {
+                    // Add char that follows the escape char to token
+                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+                    tok[tokIndex] = input[++i]; // Advance past next index in input
+                    tok[++tokIndex] = '\0';
+                }
                 // Substitute ~ with $HOME, if applicable
-                if (input[i] == '~') {
+                else if (input[i] == '~') {
                     // Allocate memory for $HOME in tok
                     tok = (char *) realloc(tok, (tokIndex + strlen(home) + 1) * sizeof(char));
                     // Add $HOME to token
@@ -128,8 +136,7 @@ int main() {
                 else {
                     tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
                     tok[tokIndex] = input[i];
-                    tok[tokIndex + 1] = '\0';
-                    ++tokIndex;
+                    tok[++tokIndex] = '\0';
                 }
             }
             // Case when we've reached the end of a word
