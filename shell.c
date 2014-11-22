@@ -6,6 +6,14 @@
 // TODO tab completion
 #include "shell.h"
 
+char cmd_error = FALSE;
+
+static void sighandler(int signo) {
+    if (signo == CMD_ERROR_SIGNAL) {
+        cmd_error = TRUE;
+    }
+}
+
 void print_error() {
     if (errno) {
         printf("[Error %d]: %s\n", errno, strerror(errno));
@@ -25,7 +33,12 @@ char *get_uid_symbol(char *uid_symbol_container) {
     const char non_root = '$';
     const char root = '#';
     if (getuid() != 0) {
-        sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_white, non_root, reset);
+        if (cmd_error == TRUE) {
+            sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_red_160, non_root, reset);
+        }
+        else {
+            sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_white, non_root, reset);
+        }
         return uid_symbol_container;
     }
     else {
@@ -81,12 +94,13 @@ void trim_whitespace(char *input) {
 }
 
 int main() {
+    signal(CMD_ERROR_SIGNAL, sighandler);
     // TODO allow for possible changing home dir
     const char *home = getenv("HOME");
     while (1) {
         // Initializations
         char cwd[768];
-        cwd[768] = '\0';
+        cwd[767] = '\0';
         char input[INPUT_BUF_SIZE];
         char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char *));
         char **opts = (char **) malloc(sizeof(char *));
@@ -141,6 +155,8 @@ int main() {
             }
             ++i;
         }
+        cmd_error = FALSE; // Reset the error flag
+        // If a command was supplied, then try to execute it
         if (i > 1) {
             // Add last opt to opts array
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
@@ -150,10 +166,13 @@ int main() {
             opts[optCount][strlen(tok)] = '\0';
             // Increment optCount counter
             ++optCount;
+
             // Add required NULL argument for exec
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
             opts[optCount] = (char *) malloc(sizeof(char));
             opts[optCount] = NULL;
+
+            // Debug info
             printf("cmd: %s\n", opts[0]);
             int u = 0;
             while (u <= optCount) {
@@ -161,6 +180,8 @@ int main() {
                 ++u;
             }
             printf("<~~~~~~~~ Output ~~~~~~~~>\n");
+
+            // Handle built-in commands
             if (strcmp(opts[0], cmd_exit) == 0) {
                 printf("Exiting...\n");
                 // Free dynamically allocated memory before exiting
@@ -173,21 +194,25 @@ int main() {
                 exit(0);
             }
             else if (strcmp(opts[0], cmd_cd) == 0){
-	      if (opts[1] == NULL) {
-		if (chdir(home) < 0) { // Returns -1 if error
-		    print_error();
-		}
-	      }
-	      else if (chdir(opts[1]) < 0) { // Returns -1 if error
-		print_error();
-	      }
-	    }
+                if (opts[1] == NULL) {
+                    if (chdir(home) < 0) { // Returns -1 if error
+                        print_error();
+                        cmd_error = TRUE;
+                    }
+                }
+                else if (chdir(opts[1]) < 0) { // Returns -1 if error
+                    print_error();
+                    cmd_error = TRUE;
+                }
+            }
             else {
-                // Execution
+                // Fork to execute command
                 int child_pid = fork();
                 if (!child_pid) {
                     if (execvp(opts[0], opts) < 0) { // Returns -1 if error
                         print_error();
+                        // Notify parent of error
+                        kill(getppid(), CMD_ERROR_SIGNAL);
                     }
                     // Note: child automatically exits after successful execvp
                     exit(0);

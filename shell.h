@@ -9,11 +9,15 @@
 #include <time.h>
 #include <sys/types.h>
 #include <pwd.h>
+#include <signal.h>
 
 // Constants
 #define INPUT_BUF_SIZE 256
 #define PROMPT_MAX_SIZE 1024
 #define DATE_MAX_SIZE 50
+#define TRUE 1
+#define FALSE 0
+#define CMD_ERROR_SIGNAL SIGUSR1
 
 // Shell built-in functions
 const char *cmd_exit = "exit";
@@ -32,6 +36,7 @@ const char *fg_bright_green = "38;5;118m";
 const char *fg_green = "38;5;34m";
 
 // Function type signatures
+static void sighandler(int);
 void print_error();
 char *get_user();
 char *get_uid_symbol(char *);
