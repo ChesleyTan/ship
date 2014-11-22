@@ -74,25 +74,6 @@ void abbreviate_home(char *full_path, const char *home_dir, size_t full_path_len
     }
 }
 
-void trim_whitespace(char *input) {
-    // TODO trim trailing whitespace
-    int i = 0;
-    // Count number of preceding whitespace
-    int num_preceding_whitespace = 0;
-    while (input[i] && input[i] == ' ') {
-        ++num_preceding_whitespace;
-        ++i;
-    }
-    // Trim preceding whitespace
-    i = 0;
-    if (num_preceding_whitespace > 0) {
-        while(input[i]) {
-            input[i] = input[i + num_preceding_whitespace];
-            ++i;
-        }
-    }
-}
-
 int main() {
     signal(CMD_ERROR_SIGNAL, sighandler);
     // TODO allow for possible changing home dir
@@ -127,45 +108,46 @@ int main() {
         }
         // Parse input
         int i = 0, optCount = 0, tokIndex = 0;
-        // Trim whitespace
-        trim_whitespace(input);
         // Iterate through each char of input
         while (input[i]) {
-            if (input[i] != '\n') {
+            if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
                 // Copy char to var tok
                 tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
                 tok[tokIndex] = input[i];
                 tok[tokIndex + 1] = '\0';
+                ++tokIndex;
             }
             // Case when we've reached the end of a word
-            if (input[i] == ' ') {
-                // Add null terminator, replacing the space
-                tok[tokIndex] = '\0';
+            // tokIndex != 0 ensures that there is non-whitespace preceding this space
+            else if (input[i] == ' ' && tokIndex != 0) {
                 opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
                 // Copy token to opts array
                 opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
                 strncpy(opts[optCount], tok, tokIndex + 1);
+                // Clear tok
+                tok[0] = '\0';
                 // Reset tokIndex to 0
                 tokIndex = 0;
                 // Increment optCount to keep track of num of opts
                 ++optCount;
             }
-            else {
-                ++tokIndex;
-            }
             ++i;
         }
         cmd_error = FALSE; // Reset the error flag
         // If a command was supplied, then try to execute it
-        if (i > 1) {
+        // !(optCount == 0 && tokIndex == 0) ensures that there was
+        // at least one non-whitespace character in the input
+        if (i > 1 && !(optCount == 0 && tokIndex == 0)) {
             // Add last opt to opts array
-            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-            opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-            // Copy token to opts and add null terminator
-            strncpy(opts[optCount], tok, strlen(tok));
-            opts[optCount][strlen(tok)] = '\0';
-            // Increment optCount counter
-            ++optCount;
+            if (tok[0] != '\0') { // Make sure an argument exists to add
+                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+                // Copy token to opts and add null terminator
+                strncpy(opts[optCount], tok, strlen(tok));
+                opts[optCount][strlen(tok)] = '\0';
+                // Increment optCount counter
+                ++optCount;
+            }
 
             // Add required NULL argument for exec
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
