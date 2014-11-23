@@ -28,7 +28,6 @@ static void sighandler(int signo) {
             // TODO make this async-safe
             // Re-display prompt
             char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
-            const char *home = getenv("HOME");
             get_prompt(prompt, PROMPT_MAX_SIZE);
             write(STDOUT_FILENO, "\n", 1);
             write(STDOUT_FILENO, prompt, strlen(prompt));

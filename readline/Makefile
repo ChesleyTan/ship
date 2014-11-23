@@ -4,7 +4,7 @@ all: shell.o
 	make clean
 
 shell.o: shell.c shell.h
-	gcc -c -g shell.c
+	gcc -c -g -Wall shell.c
 
 clean:
 	rm *.o
