@@ -351,11 +351,13 @@ int main() {
             exit(0);
         }
         strncpy(input, line, INPUT_BUF_SIZE);
-        add_history(input);
-        free(line);
         printf("input: %s\n", input);
 
         parse_input(input);
+        if (cmd_error == FALSE) {
+            add_history(input);
+        }
+        free(line);
         free_all();
     }
     return 0;
