@@ -170,6 +170,11 @@ void execute() {
         else {
             int status;
             wait(&status);
+            if (WIFEXITED(status)) {
+                if (WEXITSTATUS(status)) { // If exit status not 0
+                    cmd_error = TRUE;
+                }
+            }
         }
     }
     printf("<~~~~ End of Output ~~~~~>\n");
@@ -342,6 +347,7 @@ int main() {
         if (line == NULL) {
             printf("\n[Reached EOF]\n");
             free(line);
+            free(prompt);
             exit(0);
         }
         strncpy(input, line, INPUT_BUF_SIZE);
