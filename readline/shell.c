@@ -47,14 +47,17 @@ void cd(const char *target) {
     // don't want to overwrite the old_pwd
     char dup_target[DIR_NAME_MAX_SIZE];
     strncpy(dup_target, target, sizeof(dup_target));
+    dup_target[sizeof(dup_target) - 1] = '\0';
     // Store the previous old_pwd in case chdir fails and we have to revert
     char prev_old_pwd[DIR_NAME_MAX_SIZE];
     strncpy(prev_old_pwd, old_pwd, sizeof(prev_old_pwd));
+    prev_old_pwd[sizeof(prev_old_pwd) - 1] = '\0';
     getcwd(old_pwd, sizeof(old_pwd)); // Set the current dir as the new old_pwd
     if (chdir(dup_target) < 0) { // Returns -1 if error
         print_error();
         cmd_error = CMD_ERROR;
         strncpy(old_pwd, prev_old_pwd, sizeof(old_pwd)); // Restore previous old_pwd
+        old_pwd[sizeof(old_pwd) - 1] = '\0';
     }
 }
 
@@ -119,6 +122,7 @@ void abbreviate_home(char *full_path, size_t full_path_length) {
         trunc_path = strncat(trunc_path, (char *) &match[strlen(home)], path_size - 2);
         trunc_path[path_size - 1] = '\0';
         strncpy(full_path, trunc_path, full_path_length);
+        full_path[full_path_length - 1] = '\0';
         free(trunc_path);
     }
 }
@@ -297,7 +301,8 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
             // Copy token to opts array
             opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-            strncpy(opts[optCount], tok, tokIndex + 1);
+            strncpy(opts[optCount], tok, strlen(tok));
+            opts[optCount][strlen(tok)] = '\0';
             // Reset tok
             tok[0] = '\0';
             // Reset tokIndex to 0
@@ -353,6 +358,7 @@ int main() {
             exit(0);
         }
         strncpy(input, line, INPUT_BUF_SIZE);
+        input[INPUT_BUF_SIZE - 1] = '\0';
         printf("input: %s\n", input);
 
         parse_input(input);
