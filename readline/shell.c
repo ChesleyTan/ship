@@ -306,7 +306,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     // If a command was supplied, then try to execute it
     // !(optCount == 0 && tokIndex == 0) ensures that there was
     // at least one non-whitespace character in the input
-    if (i > 1 && !(optCount == 0 && tokIndex == 0)) {
+    if (i >= 1 && !(optCount == 0 && tokIndex == 0)) {
         // Add last opt to opts array
         if (tok[0] != '\0') { // Make sure an argument exists to add
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
