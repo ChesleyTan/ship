@@ -72,21 +72,28 @@ char *get_user() {
     return "Anon";
 }
 
-char *get_uid_symbol(char *uid_symbol_container) {
+char *get_uid_symbol() {
+    char *uid_symbol;
     const char non_root = '$';
     const char root = '#';
     if (getuid() != 0) {
         if (cmd_error == TRUE) {
-            sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_red_160, non_root, reset);
+            int required_size = sizeof(char) * (strlen(bold_prefix) + strlen(fg_red_160) + 1 + strlen(reset) + 1);
+            uid_symbol = (char *) malloc(required_size);
+            sprintf(uid_symbol, "%s%s%c%s", bold_prefix, fg_red_160, non_root, reset);
         }
         else {
-            sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_white, non_root, reset);
+            int required_size = sizeof(char) * (strlen(bold_prefix) + strlen(fg_white) + 1 + strlen(reset) + 1);
+            uid_symbol = (char *) malloc(required_size);
+            sprintf(uid_symbol, "%s%s%c%s", bold_prefix, fg_white, non_root, reset);
         }
-        return uid_symbol_container;
+        return uid_symbol;
     }
     else {
-        sprintf(uid_symbol_container, "%s%s%c%s", bold_prefix, fg_red_196, root, reset);
-        return uid_symbol_container;
+        int required_size = sizeof(char) * (strlen(bold_prefix) + strlen(fg_red_196) + 1 + strlen(reset) + 1);
+        uid_symbol = (char *) malloc(required_size);
+        sprintf(uid_symbol, "%s%s%c%s", bold_prefix, fg_red_196, root, reset);
+        return uid_symbol;
     }
 }
 
@@ -192,8 +199,7 @@ void get_prompt(char *prompt, int prompt_max_size) {
     abbreviate_home(cwd, sizeof(cwd));
     char *time_str = (char *) malloc (DATE_MAX_SIZE);
     get_time_str(time_str);
-    char *uid_symbol = (char *) calloc(sizeof(char), 20);
-    get_uid_symbol(uid_symbol);
+    char *uid_symbol = get_uid_symbol();
     snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
     free(uid_symbol);
     free(time_str);

@@ -27,17 +27,18 @@ const char *cmd_exit = "exit";
 const char *cmd_cd = "cd";
 const char *cmd_back = "back";
 
-// ANSI Escape codes
-const char *reset = "\e[0m";
-const char *bold_prefix = "\e[1;";
-const char *dim_prefix = "\e[2;";
-const char *underline_prefix = "\e[4;";
-const char *fg_blue_39 = "38;5;39m";
-const char *fg_red_196 = "38;5;196m";
-const char *fg_red_160 = "38;5;160m";
-const char *fg_white = "38;5;15m";
-const char *fg_bright_green = "38;5;118m";
-const char *fg_green = "38;5;34m";
+// ANSI Escape codes (wrapped with \001 and \002 so readline ignores
+// non-printing characters when calculating prompt size)
+const char *reset = "\001\e[0m\002";
+const char *bold_prefix = "\001\e[1;\002";
+const char *dim_prefix = "\001\e[2;\002";
+const char *underline_prefix = "\001\e[4;\002";
+const char *fg_blue_39 = "\00138;5;39m\002";
+const char *fg_red_196 = "\00138;5;196m\002";
+const char *fg_red_160 = "\00138;5;160m\002";
+const char *fg_white = "\00138;5;15m\002";
+const char *fg_bright_green = "\00138;5;118m\002";
+const char *fg_green = "\00138;5;34m\002";
 
 // Parsing states
 const char STATE_NORMAL = 0;
@@ -49,7 +50,7 @@ void print_error();
 void cd(const char *target);
 void cd_back();
 char *get_user();
-char *get_uid_symbol(char *uid_symbol_container);
+char *get_uid_symbol();
 char *get_time_str(char *time_str_container);
 void abbreviate_home(char *full_path, size_t full_path_length);
 void execute();
