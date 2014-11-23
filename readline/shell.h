@@ -39,6 +39,10 @@ const char *fg_white = "38;5;15m";
 const char *fg_bright_green = "38;5;118m";
 const char *fg_green = "38;5;34m";
 
+// Parsing states
+const char STATE_NORMAL = 0;
+const char STATE_IN_QUOTES = 1;
+
 // Function type signatures
 static void sighandler(int signo);
 void print_error();

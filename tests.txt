@@ -1,3 +1,9 @@
-       ls   -ahl        --color     ~  
-       ls -ahl --color ~;cat ~/.zshrc 
+       ls   -ahl        --color     ~  ;
+       ls -ahl --color ~;whoami ;
+
+  mkdir dir\ with\ spaces;
+  pwd;
+    cd ..;
+    back;
+    rmdir "dir with spaces";
 

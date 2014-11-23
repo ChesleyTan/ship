@@ -1,8 +1,8 @@
-// TODO dynamically allocated cwd size?
-// TODO implement proper use of quotation marks -> ignore quotes and ignore spaces in quotes
+// TODO fg, bg processes (&), jobs
 // TODO git prompt
 // TODO command tab-completion
-// TODO redirection
+// TODO simple redirection
+// TODO arithmetic?
 #include "shell.h"
 
 char cmd_error = FALSE;
@@ -166,6 +166,7 @@ void execute() {
             wait(&status);
         }
     }
+    printf("<~~~~ End of Output ~~~~~>\n");
 }
 
 void free_all() {
@@ -205,9 +206,10 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     tok[0] = '\0';
     optCount = 0;
     int i = 0, tokIndex = 0;
+    char state = STATE_NORMAL;
     // Iterate through each char of input
     while (input[i]) {
-        if (input[i] != '\n' && input[i] != ' ') { // Ignore whitespace
+        if ((input[i] != '\n' && input[i] != ' ') || (state == STATE_IN_QUOTES)) { // Ignore whitespace
             // Handle escape characters
             if (input[i] == '\\') {
                 // Add char that follows the escape char to token
@@ -249,6 +251,17 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 opts = (char **) malloc(sizeof(char *));
                 // Reset optCount
                 optCount = 0;
+            }
+            // Interpret words in quotes as a single token
+            else if (input[i] == '\"') {
+                if (state != STATE_IN_QUOTES) {
+                    printf("Entering quotes\n");
+                    state = STATE_IN_QUOTES;
+                }
+                else {
+                    printf("Exiting quotes\n");
+                    state = STATE_NORMAL;
+                }
             }
             // Substitute ~ with $HOME, if applicable
             else if (input[i] == '~') {
