@@ -19,6 +19,9 @@
 #define DATE_MAX_SIZE 50
 #define TRUE 1
 #define FALSE 0
+#define CMD_ERROR 0
+#define CMD_OKAY 1
+#define CMD_BLANK 2
 #define CMD_ERROR_SIGNAL SIGUSR1
 #define DIR_NAME_MAX_SIZE 768
 

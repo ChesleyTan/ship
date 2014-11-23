@@ -5,7 +5,7 @@
 // TODO arithmetic?
 #include "shell.h"
 
-char cmd_error = FALSE;
+char cmd_error = CMD_OKAY;
 int child_pid;
 const char *home;
 char input[INPUT_BUF_SIZE];
@@ -17,7 +17,7 @@ char old_pwd[DIR_NAME_MAX_SIZE];
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
-        cmd_error = TRUE;
+        cmd_error = CMD_ERROR;
     }
     else if (signo == SIGINT) {
         if (child_pid) {
@@ -53,7 +53,7 @@ void cd(const char *target) {
     getcwd(old_pwd, sizeof(old_pwd)); // Set the current dir as the new old_pwd
     if (chdir(dup_target) < 0) { // Returns -1 if error
         print_error();
-        cmd_error = TRUE;
+        cmd_error = CMD_ERROR;
         strncpy(old_pwd, prev_old_pwd, sizeof(old_pwd)); // Restore previous old_pwd
     }
 }
@@ -76,7 +76,7 @@ char *get_uid_symbol() {
     const char non_root = '$';
     const char root = '#';
     if (getuid() != 0) {
-        if (cmd_error == TRUE) {
+        if (cmd_error == CMD_ERROR) {
             int required_size = sizeof(char) * (strlen(bold_prefix) + strlen(fg_red_160) + 1 + strlen(reset) + 1);
             uid_symbol = (char *) malloc(required_size);
             sprintf(uid_symbol, "%s%s%c%s", bold_prefix, fg_red_160, non_root, reset);
@@ -172,7 +172,7 @@ void execute() {
             wait(&status);
             if (WIFEXITED(status)) {
                 if (WEXITSTATUS(status)) { // If exit status not 0
-                    cmd_error = TRUE;
+                    cmd_error = CMD_ERROR;
                 }
             }
         }
@@ -307,7 +307,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         }
         ++i;
     }
-    cmd_error = FALSE; // Reset the error flag
+    cmd_error = CMD_OKAY; // Reset the error flag
     // If a command was supplied, then try to execute it
     // !(optCount == 0 && tokIndex == 0) ensures that there was
     // at least one non-whitespace character in the input
@@ -328,7 +328,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         opts[optCount] = NULL;
 
         execute();
-
+    }
+    else {
+        cmd_error = CMD_BLANK;
     }
 }
 
@@ -354,7 +356,7 @@ int main() {
         printf("input: %s\n", input);
 
         parse_input(input);
-        if (cmd_error == FALSE) {
+        if (cmd_error == CMD_OKAY) {
             add_history(input);
         }
         free(line);
