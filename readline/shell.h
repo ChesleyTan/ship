@@ -24,6 +24,7 @@
 #define CMD_BLANK 2
 #define CMD_ERROR_SIGNAL SIGUSR1
 #define DIR_NAME_MAX_SIZE 768
+#define GIT_BRANCH_MAX_SIZE 128
 
 // Shell built-in functions
 const char *cmd_exit = "exit";
@@ -61,4 +62,4 @@ void execute();
 void free_all();
 void get_prompt(char *prompt, int prompt_max_size);
 void parse_input(char input[INPUT_BUF_SIZE]);
-
+void git_branch(char *container, size_t container_size);

@@ -1,5 +1,5 @@
 // TODO fg, bg processes (&), jobs
-// TODO git prompt
+// TODO strip '* ' from git prompt, put () in function, error case, unicode
 // TODO command tab-completion
 // TODO simple redirection
 // TODO arithmetic?
@@ -208,13 +208,16 @@ void get_prompt(char *prompt, int prompt_max_size) {
     }
     // Generate prompt
     abbreviate_home(cwd, sizeof(cwd));
-    char *time_str = (char *) malloc (DATE_MAX_SIZE);
+    char *time_str = (char *) malloc (DATE_MAX_SIZE * sizeof(char));
     get_time_str(time_str);
     char *uid_symbol = get_uid_symbol();
     char hostname[256];
     hostname[255] = '\0';
     gethostname(hostname, sizeof(hostname));
-    snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s%s%s%s@%s%s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_24, hostname, reset, bold_prefix, fg_bright_green, reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
+    char *git_branch_container = (char *) malloc(GIT_BRANCH_MAX_SIZE * sizeof(char));
+    git_branch(git_branch_container, GIT_BRANCH_MAX_SIZE);
+    snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s%s%s%s@%s%s%s%s:%s%s%s%s%s %s%s(%s)%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_24, hostname, reset, bold_prefix, fg_bright_green, reset, bold_prefix, fg_blue_39, cwd, reset, bold_prefix, fg_green, git_branch_container, reset, uid_symbol, bold_prefix, fg_green, reset);
+    free(git_branch_container);
     free(uid_symbol);
     free(time_str);
 }
@@ -342,6 +345,45 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     }
     else {
         cmd_error = CMD_BLANK;
+    }
+}
+
+void git_branch(char *container, size_t container_size) {
+    char *l_opts[3] = {"git", "branch", NULL};
+    int pipes[2];
+    if (pipe(pipes) < 0) { // Returns -1 if error
+        print_error();
+        // Notify parent of error
+        kill(getppid(), CMD_ERROR_SIGNAL);
+    }
+    // Fork to execute command
+    child_pid = fork();
+    if (!child_pid) {
+        dup2(pipes[1], STDOUT_FILENO);
+        close(pipes[0]);
+        if (execvp(l_opts[0], l_opts) < 0) { // Returns -1 if error
+        }
+        // Note: child automatically exits after successful execvp
+        exit(0);
+    }
+    else {
+        close(pipes[1]);
+        char output[1024];
+        int bytes = read(pipes[0], output, sizeof(output));
+        output[bytes] = '\0';
+        int i = 0;
+        int container_index = 0;
+        for (;output[i];++i) {
+            if (output[i] == '*') {
+                while (output[i] && output[i] != '\n' && (container_index < container_size - 1)) {
+                    container[container_index++] = output[i];
+                    ++i;
+                }
+                break;
+            }
+        }
+        container[container_index] = '\0';
+        wait(NULL);
     }
 }
 
