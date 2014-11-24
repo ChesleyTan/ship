@@ -37,6 +37,7 @@ const char *bold_prefix = "\001\e[1;\002";
 const char *dim_prefix = "\001\e[2;\002";
 const char *underline_prefix = "\001\e[4;\002";
 const char *fg_blue_39 = "\00138;5;39m\002";
+const char *fg_blue_24 = "\00138;5;24m\002";
 const char *fg_red_196 = "\00138;5;196m\002";
 const char *fg_red_160 = "\00138;5;160m\002";
 const char *fg_white = "\00138;5;15m\002";

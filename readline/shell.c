@@ -3,6 +3,9 @@
 // TODO command tab-completion
 // TODO simple redirection
 // TODO arithmetic?
+// TODO feature toggle(runtime config?)
+// TODO shells vars dict
+// TODO control statements
 #include "shell.h"
 
 char cmd_error = CMD_OKAY;
@@ -208,7 +211,10 @@ void get_prompt(char *prompt, int prompt_max_size) {
     char *time_str = (char *) malloc (DATE_MAX_SIZE);
     get_time_str(time_str);
     char *uid_symbol = get_uid_symbol();
-    snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
+    char hostname[256];
+    hostname[255] = '\0';
+    gethostname(hostname, sizeof(hostname));
+    snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s%s%s%s@%s%s%s%s:%s%s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_24, hostname, reset, bold_prefix, fg_bright_green, reset, bold_prefix, fg_blue_39, cwd, reset, uid_symbol, bold_prefix, fg_green, reset);
     free(uid_symbol);
     free(time_str);
 }
