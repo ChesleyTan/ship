@@ -19,14 +19,17 @@
 #define DATE_MAX_SIZE 50
 #define TRUE 1
 #define FALSE 0
-#define CMD_ERROR 0
-#define CMD_OKAY 1
-#define CMD_BLANK 2
+// positive or zero cmd_error means successful execution
+#define CMD_ERROR -1
+#define CMD_BLANK -2
+#define CMD_OKAY 0
+#define CMD_FINISHED 1
 #define CMD_ERROR_SIGNAL SIGUSR1
 #define DIR_NAME_MAX_SIZE 768
 #define GIT_BRANCH_MAX_SIZE 128
 #define GIT_STATUS_MAX_SIZE 10
 #define STATE_STACK_SIZE 256
+#define MAX_CMD_SUBSTITUTION_SIZE 1024
 
 // Shell built-in functions
 const char *cmd_exit = "exit";
@@ -55,6 +58,7 @@ const char *delta = "\xce\x94";
 // Parsing states
 const char STATE_NORMAL = 0;
 const char STATE_IN_QUOTES = 1;
+const char STATE_CMD_SUBSTITUTION = 2;
 
 // Function type signatures
 static void sighandler(int signo);
@@ -72,6 +76,7 @@ void get_prompt(char *prompt, int prompt_max_size);
 void parse_input(char input[INPUT_BUF_SIZE]);
 void git_branch(char *container, size_t container_size);
 void git_status(char *container, size_t container_size);
+void get_stdout_execute(char *container, size_t container_size);
 char *git();
 int push_state(const char state);
 const char pop_state();

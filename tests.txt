@@ -6,4 +6,5 @@
     cd ..;
     back;
     rmdir "dir with spaces";
-
+ls > ls.txt;
+ls>>ls.txt;
