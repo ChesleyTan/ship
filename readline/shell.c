@@ -252,12 +252,19 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     tokIndex = 0;
     int i = 0;
     clear_state_stack();
-    inline void get_next_keyword(const char *extra_delims) {
-        int keyword_index = i;
-        char tmp = input[++keyword_index];
+    inline char *get_next_keyword(const char *extra_delims) {
+        char *keyword = (char *) malloc(sizeof(char));
+        int keyword_index = 0;
+        int index = i;
+        char tmp = input[++index];
         while (tmp && tmp != '\n' && tmp != ' ' && strchr(extra_delims, tmp) == NULL) {
-            tmp = input[++keyword_index];
+            keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
+            keyword[keyword_index++] = tmp;
+            tmp = input[++index];
         }
+        keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
+        keyword[keyword_index] = '\0';
+        return keyword;
     }
     // Iterate through each char of input
     while (input[i]) {
@@ -315,6 +322,40 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 tok[tokIndex + strlen(home)] = '\0';
                 // Update tokIndex
                 tokIndex += strlen(home);
+            }
+            // Redirection of stdout to file (>)
+            // TODO append(>>)
+            else if (input[i] == '>') {
+                printf("opt: %s\n", opts[0]);
+                printf("optCount: %d\n", optCount);
+                printf("Got >\n");
+                while (input[i+1] == ' ') {
+                    // Advance past the optional whitespace following the redirection symbol
+                    ++i;
+                }
+                const char *extra_delims = "";
+                char *file = get_next_keyword(extra_delims);
+                printf("Redirect to file: %s\n", file);
+                int fd = open(file, O_CREAT | O_WRONLY | O_TRUNC, 0644); // Open file for redirection
+                // TODO use a state for this to get substitution and escapes
+                if (fd < 0) {
+                    fprintf(stderr, "[Error]: Cannot open file for redirection.");
+                }
+                int stdout_dup = dup(STDOUT_FILENO);
+                dup2(fd, STDOUT_FILENO); // Redirect stdout to fd
+                // Add required NULL argument for exec
+                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                opts[optCount] = NULL;
+                printf("opt: %s\n", opts[0]);
+                printf("optCount: %d\n", optCount);
+                // Advance past file name
+                i += strlen(file);
+                execute();
+                close(fd);
+                dup2(stdout_dup, STDOUT_FILENO); // Restore stdout
+                close(stdout_dup);
+                free(file);
+                reset_execute_variables();
             }
             // Copy char to var tok
             else {
