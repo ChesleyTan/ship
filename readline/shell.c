@@ -172,11 +172,11 @@ void execute() {
                 kill(getppid(), CMD_ERROR_SIGNAL);
             }
             // Note: child automatically exits after successful execvp
-            exit(0);
+            exit(1);
         }
         else {
             int status;
-            wait(&status);
+            waitpid(child_pid, &status, 0);
             if (WIFEXITED(status)) {
                 if (WEXITSTATUS(status)) { // If exit status not 0
                     cmd_error = CMD_ERROR;
@@ -214,10 +214,9 @@ void get_prompt(char *prompt, int prompt_max_size) {
     char hostname[256];
     hostname[255] = '\0';
     gethostname(hostname, sizeof(hostname));
-    char *git_branch_container = (char *) malloc(GIT_BRANCH_MAX_SIZE * sizeof(char));
-    git_branch(git_branch_container, GIT_BRANCH_MAX_SIZE);
-    snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s%s%s%s@%s%s%s%s:%s%s%s%s%s %s%s(%s)%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_24, hostname, reset, bold_prefix, fg_bright_green, reset, bold_prefix, fg_blue_39, cwd, reset, bold_prefix, fg_green, git_branch_container, reset, uid_symbol, bold_prefix, fg_green, reset);
-    free(git_branch_container);
+    char *git_container = git();
+    snprintf(prompt, prompt_max_size, "%s%s[%s]%s %s%s%s%s%s%s@%s%s%s%s:%s%s%s%s%s %s%s%s%s %s\n%s%s>>%s ", bold_prefix, fg_red_196, time_str, reset, bold_prefix, fg_bright_green, get_user(), reset, bold_prefix, fg_blue_24, hostname, reset, bold_prefix, fg_bright_green, reset, bold_prefix, fg_blue_39, cwd, reset, bold_prefix, fg_green, git_container, reset, uid_symbol, bold_prefix, fg_green, reset);
+    free(git_container);
     free(uid_symbol);
     free(time_str);
 }
@@ -353,29 +352,35 @@ void git_branch(char *container, size_t container_size) {
     int pipes[2];
     if (pipe(pipes) < 0) { // Returns -1 if error
         print_error();
-        // Notify parent of error
-        kill(getppid(), CMD_ERROR_SIGNAL);
+        return;
     }
     // Fork to execute command
     child_pid = fork();
     if (!child_pid) {
         dup2(pipes[1], STDOUT_FILENO);
         close(pipes[0]);
+        freopen("/dev/null", "w", stderr); // Redirect stderr to /dev/null
         if (execvp(l_opts[0], l_opts) < 0) { // Returns -1 if error
+            container[0] = '\0';
         }
         // Note: child automatically exits after successful execvp
-        exit(0);
+        exit(1);
     }
     else {
         close(pipes[1]);
         char output[1024];
         int bytes = read(pipes[0], output, sizeof(output));
+        if (bytes == 0) { // Git error (e.g. not in git repo)
+            container[0] = '\0';
+            return;
+        }
         output[bytes] = '\0';
         int i = 0;
         int container_index = 0;
         for (;output[i];++i) {
-            if (output[i] == '*') {
-                while (output[i] && output[i] != '\n' && (container_index < container_size - 1)) {
+            if (output[i] == '*' && output[i + 1] == ' ') {
+                i += 2; // Advance past * and space
+                while (output[i] && output[i] != '\n' && (container_index < container_size - 2)) {
                     container[container_index++] = output[i];
                     ++i;
                 }
@@ -385,6 +390,73 @@ void git_branch(char *container, size_t container_size) {
         container[container_index] = '\0';
         wait(NULL);
     }
+}
+
+void git_status(char *container, size_t container_size) {
+    if (container_size < GIT_STATUS_MAX_SIZE) {
+        fprintf(stderr, "[Error]: Incorrect size for git status container.");
+        return;
+    }
+    char *l_opts[3] = {"git", "status", NULL};
+    int pipes[2];
+    if (pipe(pipes) < 0) { // Returns -1 if error
+        print_error();
+        return;
+    }
+    // Fork to execute command
+    child_pid = fork();
+    if (!child_pid) {
+        dup2(pipes[1], STDOUT_FILENO);
+        close(pipes[0]);
+        freopen("/dev/null", "w", stderr); // Redirect stderr to /dev/null
+        if (execvp(l_opts[0], l_opts) < 0) { // Returns -1 if error
+            container[0] = '\0';
+        }
+        // Note: child automatically exits after successful execvp
+        exit(0);
+    }
+    else {
+        close(pipes[1]);
+        char output[4096];
+        int bytes = read(pipes[0], output, sizeof(output));
+        if (bytes == 0) { // Git error (e.g. not in git repo)
+            container[0] = '\0';
+            return;
+        }
+        output[bytes] = '\0';
+        int container_index = 0;
+        if (strstr(output, "Changes to be committed") != NULL) {
+            sprintf(container, " %s", cross);
+            container_index += strlen(cross) + 1;
+        }
+        else {
+            sprintf(container, " %s", check);
+            container_index += strlen(check) + 1;
+        }
+        if (strstr(output, "Changes not staged for commit") != NULL) {
+            sprintf(container, "%s %s", container, delta);
+            container_index += strlen(delta) + 1;
+        }
+        container[container_index] = '\0';
+        wait(NULL);
+    }
+}
+
+char *git() {
+    char *git_branch_container = (char *) malloc(GIT_BRANCH_MAX_SIZE * sizeof(char));
+    int container_size = GIT_BRANCH_MAX_SIZE + GIT_STATUS_MAX_SIZE;
+    char *git_container = (char *) malloc(container_size * sizeof(char));
+    git_container[0] = '\0';
+    git_branch(git_branch_container, GIT_BRANCH_MAX_SIZE);
+    if (strlen(git_branch_container) != 0) { // If in valid git repo
+        char *git_status_container = (char *) malloc(GIT_STATUS_MAX_SIZE * sizeof(char));
+        git_status(git_status_container, GIT_STATUS_MAX_SIZE);
+        snprintf(git_container, container_size, "(%s%s)", git_branch_container, git_status_container);
+        git_container[container_size - 1] = '\0';
+        free(git_status_container);
+    }
+    free(git_branch_container);
+    return git_container;
 }
 
 int main() {
