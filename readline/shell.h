@@ -66,6 +66,7 @@ char *get_uid_symbol();
 char *get_time_str(char *time_str_container);
 void abbreviate_home(char *full_path, size_t full_path_length);
 void execute();
+void reset_execute_variables();
 void free_all();
 void get_prompt(char *prompt, int prompt_max_size);
 void parse_input(char input[INPUT_BUF_SIZE]);

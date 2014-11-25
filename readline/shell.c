@@ -16,7 +16,7 @@ char input[INPUT_BUF_SIZE];
 char *prompt;
 char **opts;
 char *tok;
-int optCount;
+int optCount, tokIndex;
 char old_pwd[DIR_NAME_MAX_SIZE];
 char state_stack[STATE_STACK_SIZE];
 int stack_pointer = 0;
@@ -190,6 +190,24 @@ void execute() {
     printf("<~~~~ End of Output ~~~~~>\n");
 }
 
+void reset_execute_variables() {
+    // Reset tok
+    tok[0] = '\0';
+    // Reset tokIndex
+    tokIndex = 0;
+    // Reset opts
+    if (optCount > 0) {
+        for (;optCount >= 0;--optCount) {
+            free(opts[optCount]);
+        }
+    }
+    free(opts);
+    // Reset optCount
+    optCount = 0;
+    // Reinstantiate opts
+    opts = (char **) malloc(sizeof(char *));
+}
+
 void free_all() {
     // Free dynamically allocated memory
     free(prompt);
@@ -198,8 +216,8 @@ void free_all() {
             free(opts[optCount]);
         }
     }
-    free(opts);
     free(tok);
+    free(opts);
 }
 
 void get_prompt(char *prompt, int prompt_max_size) {
@@ -230,7 +248,8 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     tok = (char *) malloc(sizeof(char));
     tok[0] = '\0';
     optCount = 0;
-    int i = 0, tokIndex = 0;
+    tokIndex = 0;
+    int i = 0;
     clear_state_stack();
     // Iterate through each char of input
     while (input[i]) {
@@ -261,21 +280,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 opts[optCount] = NULL;
 
                 execute();
-                // Reset tok
-                tok[0] = '\0';
-                // Reset tokIndex
-                tokIndex = 0;
-                // Reset opts
-                if (optCount > 0) {
-                    for (;optCount >= 0;--optCount) {
-                        free(opts[optCount]);
-                    }
-                }
-                free(opts);
-                // Reinstantiate opts
-                opts = (char **) malloc(sizeof(char *));
-                // Reset optCount
-                optCount = 0;
+                reset_execute_variables();
             }
             // Interpret words in quotes as a single token
             else if (input[i] == '\"' || input[i] == '\'') {
