@@ -1,4 +1,5 @@
 // TODO advanced tilde
+// TODO inline substitution with ``
 // TODO fg, bg processes (&), jobs
 // TODO command tab-completion
 // TODO simple redirection
