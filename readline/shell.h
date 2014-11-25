@@ -26,6 +26,7 @@
 #define DIR_NAME_MAX_SIZE 768
 #define GIT_BRANCH_MAX_SIZE 128
 #define GIT_STATUS_MAX_SIZE 10
+#define STATE_STACK_SIZE 256
 
 // Shell built-in functions
 const char *cmd_exit = "exit";
@@ -71,3 +72,7 @@ void parse_input(char input[INPUT_BUF_SIZE]);
 void git_branch(char *container, size_t container_size);
 void git_status(char *container, size_t container_size);
 char *git();
+int push_state(const char state);
+const char pop_state();
+const char get_state();
+void clear_state_stack();

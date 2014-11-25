@@ -1,11 +1,12 @@
+// TODO advanced tilde
 // TODO fg, bg processes (&), jobs
-// TODO strip '* ' from git prompt, put () in function, error case, unicode
 // TODO command tab-completion
 // TODO simple redirection
 // TODO arithmetic?
 // TODO feature toggle(runtime config?)
 // TODO shells vars dict
 // TODO control statements
+// TODO optimization
 #include "shell.h"
 
 char cmd_error = CMD_OKAY;
@@ -17,6 +18,8 @@ char **opts;
 char *tok;
 int optCount;
 char old_pwd[DIR_NAME_MAX_SIZE];
+char state_stack[STATE_STACK_SIZE];
+int stack_pointer = 0;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -228,10 +231,10 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     tok[0] = '\0';
     optCount = 0;
     int i = 0, tokIndex = 0;
-    char state = STATE_NORMAL;
+    clear_state_stack();
     // Iterate through each char of input
     while (input[i]) {
-        if ((input[i] != '\n' && input[i] != ' ') || (state == STATE_IN_QUOTES)) { // Ignore whitespace
+        if ((input[i] != '\n' && input[i] != ' ') || (get_state() == STATE_IN_QUOTES)) { // Ignore whitespace
             // Handle escape characters
             if (input[i] == '\\') {
                 // Add char that follows the escape char to token
@@ -275,14 +278,18 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 optCount = 0;
             }
             // Interpret words in quotes as a single token
-            else if (input[i] == '\"') {
-                if (state != STATE_IN_QUOTES) {
-                    printf("Entering quotes\n");
-                    state = STATE_IN_QUOTES;
+            else if (input[i] == '\"' || input[i] == '\'') {
+                if (get_state() != STATE_IN_QUOTES) {
+                    if (push_state(STATE_IN_QUOTES) < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
                 }
                 else {
-                    printf("Exiting quotes\n");
-                    state = STATE_NORMAL;
+                    if (pop_state() < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
                 }
             }
             // Substitute ~ with $HOME, if applicable
@@ -457,6 +464,36 @@ char *git() {
     }
     free(git_branch_container);
     return git_container;
+}
+
+int push_state(const char state) {
+    if (stack_pointer > STATE_STACK_SIZE - 1) {
+        fprintf(stderr, "[Error]: Too many states on the stack.\n");
+        return -1;
+    }
+    state_stack[stack_pointer++] = state;
+    return 0;
+}
+
+const char pop_state() {
+    if (stack_pointer < 1) {
+        fprintf(stderr, "[Error]: Pop: Negative stack pointer.\n");
+        return -1;
+    }
+    return state_stack[--stack_pointer];
+}
+
+const char get_state() {
+    if (stack_pointer < 1) {
+        fprintf(stderr, "[Error]: Get: Negative stack pointer.\n");
+        return -1;
+    }
+    return state_stack[stack_pointer - 1];
+}
+
+void clear_state_stack() {
+    stack_pointer = 0;
+    state_stack[stack_pointer++] = STATE_NORMAL;
 }
 
 int main() {
