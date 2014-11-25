@@ -251,6 +251,13 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     tokIndex = 0;
     int i = 0;
     clear_state_stack();
+    inline void get_next_keyword(const char *extra_delims) {
+        int keyword_index = i;
+        char tmp = input[++keyword_index];
+        while (tmp && tmp != '\n' && tmp != ' ' && strchr(extra_delims, tmp) == NULL) {
+            tmp = input[++keyword_index];
+        }
+    }
     // Iterate through each char of input
     while (input[i]) {
         if ((input[i] != '\n' && input[i] != ' ') || (get_state() == STATE_IN_QUOTES)) { // Ignore whitespace
