@@ -1,4 +1,3 @@
-// TODO expansion of args for <, dup2 return value check
 // TODO finish simple redirection
 // TODO inline substitution with ``
 // TODO feature toggle(runtime config?)
@@ -48,7 +47,7 @@ static void readline_sigint_handler() {
 
 void print_error() {
     if (errno) {
-        printf("[Error %d]: %s\n", errno, strerror(errno));
+        fprintf(stderr, "[Error %d]: %s\n", errno, strerror(errno));
     }
 }
 
@@ -462,14 +461,30 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         reset_execute_variables();
                         return;
                     }
-                    int stdout_dup = dup(STDOUT_FILENO);
-                    dup2(fd, STDOUT_FILENO); // Redirect stdout to fd
+                    int stdout_dup;
+                    if ((stdout_dup = dup(STDOUT_FILENO) < 0)) {
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
+                    if (dup2(fd, STDOUT_FILENO) < 0) { // Redirect stdout to fd, returns -1 on error
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
                     // Add required NULL argument for exec
                     opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
                     opts[optCount] = NULL;
                     execute();
                     close(fd);
-                    dup2(stdout_dup, STDOUT_FILENO); // Restore stdout
+                    if (dup2(stdout_dup, STDOUT_FILENO) < 0) { // Restore stdout
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
                     close(stdout_dup);
                     reset_execute_variables();
                     // If no error came up during execution, then set the cmd_error flag to CMD_FINISHED
@@ -531,8 +546,19 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         reset_execute_variables();
                         return;
                     }
-                    int stdin_dup = dup(STDIN_FILENO);
-                    dup2(fd, STDIN_FILENO); // Redirect fd to stdin
+                    int stdin_dup;
+                    if ((stdin_dup = dup(STDIN_FILENO)) < 0) {
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
+                    if (dup2(fd, STDIN_FILENO) < 0) { // Redirect fd to stdin
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
                     // Add required NULL argument for exec
                     opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
                     opts[optCount] = NULL;
@@ -540,7 +566,12 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     printf("optCount: %d\n", optCount);
                     execute();
                     close(fd);
-                    dup2(stdin_dup, STDIN_FILENO); // Restore stdin
+                    if (dup2(stdin_dup, STDIN_FILENO)) { // Restore stdin
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
                     close(stdin_dup);
                     reset_execute_variables();
                     // If no error came up during execution, then set the cmd_error flag to CMD_FINISHED
@@ -614,7 +645,10 @@ void get_stdout_execute(char *container, size_t container_size) {
     // Fork to execute command
     child_pid = fork();
     if (!child_pid) {
-        dup2(pipes[1], STDOUT_FILENO);
+        if (dup2(pipes[1], STDOUT_FILENO) < 0) {
+            print_error();
+            exit(1);
+        }
         close(pipes[0]);
         freopen("/dev/null", "w", stderr); // Redirect stderr to /dev/null
         if (execvp(opts[0], opts) < 0) { // Returns -1 if error
