@@ -459,8 +459,6 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     if (fd < 0) { // fd is -1 on error
                         print_error();
                         cmd_error = CMD_ERROR;
-                        // Clean up before exiting
-                        free(file);
                         reset_execute_variables();
                         return;
                     }
@@ -481,53 +479,75 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 }
             }
             // Redirection from file to stdin (<)
-            else if (input[i] == '<') {
-                printf("Got <\n");
-                // Add last opt to opts array
-                if (tok[0] != '\0') { // Make sure an argument exists to add
+            // If we need to enter or exit redirection state
+            else if (input[i] == '<'
+                || ((current_state == STATE_REDIR_FILE_TO_STDIN && (strchr(TERM_DELIM_STATE_REDIR_FILE_TO_STDIN, input[i+1]) != NULL || input[i+1] == '\0')))
+            ) {
+                if (input[i] == '<') {
+                    printf("Got <\n");
+                    if (push_state(STATE_REDIR_FILE_TO_STDIN) < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
+                    // Add last opt to opts array
+                    if (tok[0] != '\0') { // Make sure an argument exists to add
+                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                        opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+                        // Copy token to opts and add null terminator
+                        strncpy(opts[optCount], tok, strlen(tok));
+                        opts[optCount][strlen(tok)] = '\0';
+                        // Increment optCount counter
+                        ++optCount;
+                        // Reset tok
+                        tok[0] = '\0';
+                        // Reset tokIndex
+                        tokIndex = 0;
+
+                        printf("opt: %s\n", opts[0]);
+                        printf("optCount: %d\n", optCount);
+                    }
+                    while (input[i+1] == ' ') {
+                        // Advance past the optional whitespace following the redirection symbol
+                        ++i;
+                    }
+                }
+                // If currently in redirection state and we've reached the character before the end delimeter
+                else {
+                    if (pop_state() < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
+                    // Copy current char to tok to complete filename
+                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+                    tok[tokIndex] = input[i];
+                    tok[++tokIndex] = '\0';
+                    // Reference tok as file
+                    char *file = tok;
+                    printf("Redirect file to stdin: %s\n", file);
+                    int fd = open(file, O_RDONLY); // Open file for redirection
+                    if (fd < 0) { // fd is -1 on error
+                        print_error();
+                        cmd_error = CMD_ERROR;
+                        reset_execute_variables();
+                        return;
+                    }
+                    int stdin_dup = dup(STDIN_FILENO);
+                    dup2(fd, STDIN_FILENO); // Redirect fd to stdin
+                    // Add required NULL argument for exec
                     opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                    opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                    // Copy token to opts and add null terminator
-                    strncpy(opts[optCount], tok, strlen(tok));
-                    opts[optCount][strlen(tok)] = '\0';
-                    // Increment optCount counter
-                    ++optCount;
-                }
-                printf("opt: %s\n", opts[0]);
-                printf("optCount: %d\n", optCount);
-                while (input[i+1] == ' ') {
-                    // Advance past the optional whitespace following the redirection symbol
-                    ++i;
-                }
-                const char *extra_delims = ";";
-                char *file = get_next_keyword(extra_delims);
-                printf("Redirect file to stdin: %s\n", file);
-                int fd = open(file, O_RDONLY); // Open file for redirection
-                // TODO use a state for this to get substitution and escapes
-                if (fd < 0) { // fd is -1 on error
-                    print_error();
-                    cmd_error = CMD_ERROR;
-                    // Clean up before exiting
-                    free(file);
+                    opts[optCount] = NULL;
+                    printf("opt: %s\n", opts[0]);
+                    printf("optCount: %d\n", optCount);
+                    execute();
+                    close(fd);
+                    dup2(stdin_dup, STDIN_FILENO); // Restore stdin
+                    close(stdin_dup);
                     reset_execute_variables();
-                    return;
+                    // If no error came up during execution, then set the cmd_error flag to CMD_FINISHED
+                    if (cmd_error >= 0) {
+                        cmd_error = CMD_FINISHED;
+                    }
                 }
-                int stdin_dup = dup(STDIN_FILENO);
-                dup2(fd, STDIN_FILENO); // Redirect fd to stdin
-                // Add required NULL argument for exec
-                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                opts[optCount] = NULL;
-                printf("opt: %s\n", opts[0]);
-                printf("optCount: %d\n", optCount);
-                // Advance parsing pointer past file name
-                i += strlen(file);
-                execute();
-                close(fd);
-                dup2(stdin_dup, STDIN_FILENO); // Restore stdin
-                close(stdin_dup);
-                free(file);
-                reset_execute_variables();
-                cmd_error = CMD_FINISHED;
             }
             // Copy char to var tok
             else {

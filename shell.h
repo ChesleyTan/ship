@@ -41,10 +41,12 @@ static const char STATE_IN_DOUBLE_QUOTES = 2;
 static const char STATE_CMD_SUBSTITUTION = 3;
 static const char STATE_REDIR_STDOUT_TO_FILE = 4;
 static const char STATE_REDIR_APPEND_STDOUT_TO_FILE = 5;
+static const char STATE_REDIR_FILE_TO_STDIN = 6;
 
 // Parsing state terminating delimiters
-static const char *TERM_DELIM_STATE_REDIR_STDOUT_TO_FILE = " ;>\n";
-static const char *TERM_DELIM_STATE_REDIR_APPEND_STDOUT_TO_FILE = " ;>\n";
+static const char *TERM_DELIM_STATE_REDIR_STDOUT_TO_FILE = " ;<>\n";
+static const char *TERM_DELIM_STATE_REDIR_APPEND_STDOUT_TO_FILE = " ;<>\n";
+static const char *TERM_DELIM_STATE_REDIR_FILE_TO_STDIN = " ;<>\n";
 
 // Function type signatures
 static void sighandler(int signo);

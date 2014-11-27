@@ -16,3 +16,10 @@ ls ~/Desktop;
 ls > ~/ls.txt;
 ls -ahl>>~/ls.txt>~/l.txt;
 rm ~/ls.txt ~/l.txt;
+echo "'hello world!'";
+ls > ~/ls.txt;
+cat     <   ~/ls.txt;
+cat<~/ls.txt;
+cat<<<~/ls.txt ~/ls.txt ~/ls.txt;
+rm ~/ls.txt;
+
