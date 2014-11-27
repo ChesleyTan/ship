@@ -1,3 +1,4 @@
+#pragma once
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,8 +16,7 @@
 
 // Constants
 #define INPUT_BUF_SIZE 256
-#define PROMPT_MAX_SIZE 1024
-#define DATE_MAX_SIZE 50
+#define DIR_NAME_MAX_SIZE 768
 #define TRUE 1
 #define FALSE 0
 // positive or zero cmd_error means successful execution
@@ -27,40 +27,17 @@
 #define CMD_ERROR_SIGNAL SIGUSR1
 #define EOF_EXIT_CODE 10
 #define SIGINT_EXIT_CODE 11
-#define DIR_NAME_MAX_SIZE 768
-#define GIT_BRANCH_MAX_SIZE 128
-#define GIT_STATUS_MAX_SIZE 50
-#define STATE_STACK_SIZE 256
 #define MAX_CMD_SUBSTITUTION_SIZE 1024
 
 // Shell built-in functions
-const char *cmd_exit = "exit";
-const char *cmd_cd = "cd";
-const char *cmd_back = "back";
-
-// ANSI Escape codes (wrapped with \001 and \002 so readline ignores
-// non-printing characters when calculating prompt size)
-const char *reset = "\001\e[0m\002";
-const char *bold_prefix = "\001\e[1;\002";
-const char *dim_prefix = "\001\e[2;\002";
-const char *underline_prefix = "\001\e[4;\002";
-const char *fg_blue_39 = "\00138;5;39m\002";
-const char *fg_blue_24 = "\00138;5;24m\002";
-const char *fg_red_196 = "\00138;5;196m\002";
-const char *fg_red_160 = "\00138;5;160m\002";
-const char *fg_white = "\00138;5;15m\002";
-const char *fg_bright_green = "\00138;5;118m\002";
-const char *fg_green = "\00138;5;34m\002";
-
-// UTF-8
-const char *cross = "\001\xe2\x9c\x98\002";
-const char *check = "\001\xe2\x9c\x94\002";
-const char *delta = "\001\xce\x94\002";
+static const char *cmd_exit = "exit";
+static const char *cmd_cd = "cd";
+static const char *cmd_back = "back";
 
 // Parsing states
-const char STATE_NORMAL = 0;
-const char STATE_IN_QUOTES = 1;
-const char STATE_CMD_SUBSTITUTION = 2;
+static const char STATE_NORMAL = 0;
+static const char STATE_IN_QUOTES = 1;
+static const char STATE_CMD_SUBSTITUTION = 2;
 
 // Function type signatures
 static void sighandler(int signo);
@@ -68,20 +45,21 @@ static void readline_sigint_handler();
 void print_error();
 void cd(const char *target);
 void cd_back();
-char *get_user();
-char *get_uid_symbol();
-char *get_time_str(char *time_str_container);
 void abbreviate_home(char *full_path, size_t full_path_length);
 void execute();
 void reset_execute_variables();
 void free_all();
-void get_prompt(char *prompt, int prompt_max_size);
 void parse_input(char input[INPUT_BUF_SIZE]);
-void git_branch(char *container, size_t container_size);
-void git_status(char *container, size_t container_size);
 void get_stdout_execute(char *container, size_t container_size);
-char *git();
-int push_state(const char state);
-const char pop_state();
-const char get_state();
-void clear_state_stack();
+
+// Variables
+extern char cmd_error;
+extern int child_pid, rl_child_pid;
+extern const char *home;
+extern char input[INPUT_BUF_SIZE];
+extern char **opts;
+extern char *tok;
+extern int optCount, tokIndex;
+extern char old_pwd[DIR_NAME_MAX_SIZE];
+extern char keep_alive;
+
