@@ -15,7 +15,7 @@
 #include <readline/history.h>
 
 // Constants
-#define INPUT_BUF_SIZE 256
+#define INPUT_BUF_SIZE 512
 #define DIR_NAME_MAX_SIZE 768
 #define TRUE 1
 #define FALSE 0
@@ -38,6 +38,12 @@ static const char *cmd_back = "back";
 static const char STATE_NORMAL = 0;
 static const char STATE_IN_QUOTES = 1;
 static const char STATE_CMD_SUBSTITUTION = 2;
+static const char STATE_REDIR_STDOUT_TO_FILE = 3;
+static const char STATE_REDIR_APPEND_STDOUT_TO_FILE = 4;
+
+// Parsing state terminating delimiters
+static const char *TERM_DELIM_STATE_REDIR_STDOUT_TO_FILE = " ;>\n";
+static const char *TERM_DELIM_STATE_REDIR_APPEND_STDOUT_TO_FILE = " ;>\n";
 
 // Function type signatures
 static void sighandler(int signo);

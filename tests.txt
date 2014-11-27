@@ -13,3 +13,6 @@ ls ~\c"hesley">ls.txt;
 rm ls.txt;
 ls ~chesley/Desktop;
 ls ~/Desktop;
+ls > ~/ls.txt;
+ls -ahl>>~/ls.txt>~/l.txt;
+rm ~/ls.txt ~/l.txt;
