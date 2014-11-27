@@ -1,3 +1,4 @@
+#pragma once
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,40 +11,55 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <signal.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 // Constants
 #define INPUT_BUF_SIZE 256
-#define PROMPT_MAX_SIZE 1024
-#define DATE_MAX_SIZE 50
+#define DIR_NAME_MAX_SIZE 768
 #define TRUE 1
 #define FALSE 0
+// positive or zero cmd_error means successful execution
+#define CMD_ERROR -1
+#define CMD_BLANK -2
+#define CMD_OKAY 0
+#define CMD_FINISHED 1
 #define CMD_ERROR_SIGNAL SIGUSR1
+#define EOF_EXIT_CODE 10
+#define SIGINT_EXIT_CODE 11
+#define MAX_CMD_SUBSTITUTION_SIZE 1024
 
 // Shell built-in functions
-const char *cmd_exit = "exit";
-const char *cmd_cd = "cd";
+static const char *cmd_exit = "exit";
+static const char *cmd_cd = "cd";
+static const char *cmd_back = "back";
 
-// ANSI Escape codes
-const char *reset = "\e[0m";
-const char *bold_prefix = "\e[1;";
-const char *dim_prefix = "\e[2;";
-const char *underline_prefix = "\e[4;";
-const char *fg_blue_39 = "38;5;39m";
-const char *fg_red_196 = "38;5;196m";
-const char *fg_red_160 = "38;5;160m";
-const char *fg_white = "38;5;15m";
-const char *fg_bright_green = "38;5;118m";
-const char *fg_green = "38;5;34m";
+// Parsing states
+static const char STATE_NORMAL = 0;
+static const char STATE_IN_QUOTES = 1;
+static const char STATE_CMD_SUBSTITUTION = 2;
 
 // Function type signatures
 static void sighandler(int signo);
+static void readline_sigint_handler();
 void print_error();
-char *get_user();
-char *get_uid_symbol(char *uid_symbol_container);
-char *get_time_str(char *time_str_container);
+void cd(const char *target);
+void cd_back();
 void abbreviate_home(char *full_path, size_t full_path_length);
 void execute();
+void reset_execute_variables();
 void free_all();
-void get_prompt(char *prompt, int prompt_max_size);
 void parse_input(char input[INPUT_BUF_SIZE]);
+void get_stdout_execute(char *container, size_t container_size);
+
+// Variables
+extern char cmd_error;
+extern int child_pid, rl_child_pid;
+extern const char *home;
+extern char input[INPUT_BUF_SIZE];
+extern char **opts;
+extern char *tok;
+extern int optCount, tokIndex;
+extern char old_pwd[DIR_NAME_MAX_SIZE];
+extern char keep_alive;
 

@@ -1,21 +1,28 @@
-all: shell.o
-	gcc -o shell shell.o
-	make clean
+LIBS=-lreadline
+C_FILES=shell.c state_stack.c prompt.c
+O_FILES=shell.o state_stack.o prompt.o
+WARNINGS_QUIET=-Wall -Wno-unused-variable -Wno-unused-function
+WARNINGS_ALL=-Wall
 
-shell.o: shell.c shell.h
-	gcc -c -g shell.c
+WARNINGS=$(WARNINGS_QUIET)
+
+DEBUG=-g
+all: shell.o state_stack.o prompt.o
+	@gcc -o shell $(O_FILES) $(LIBS)
+	@make clean
+
+shell.o: shell.c shell.h state_stack.h prompt.h
+	@gcc -c $(DEBUG) $(WARNINGS) shell.c
+
+state_stack.o: state_stack.c state_stack.h shell.h
+	@gcc -c $(DEBUG) $(WARNINGS) state_stack.c
+
+prompt.o: prompt.c prompt.h shell.h
+	@gcc -c $(DEBUG) $(WARNINGS) prompt.c
 
 clean:
-	rm *.o
+	@rm *.o
 
 run:
-	./shell
-
-new: new_shell.o
-	gcc -o new_shell new_shell.o
-	make clean
-
-new_shell.o: new_shell.c new_shell.h
-	gcc -c -g new_shell.c
-
+	@./shell
 
