@@ -25,9 +25,11 @@
 #define CMD_OKAY 0
 #define CMD_FINISHED 1
 #define CMD_ERROR_SIGNAL SIGUSR1
+#define EOF_EXIT_CODE 10
+#define SIGINT_EXIT_CODE 11
 #define DIR_NAME_MAX_SIZE 768
 #define GIT_BRANCH_MAX_SIZE 128
-#define GIT_STATUS_MAX_SIZE 10
+#define GIT_STATUS_MAX_SIZE 50
 #define STATE_STACK_SIZE 256
 #define MAX_CMD_SUBSTITUTION_SIZE 1024
 
@@ -51,9 +53,9 @@ const char *fg_bright_green = "\00138;5;118m\002";
 const char *fg_green = "\00138;5;34m\002";
 
 // UTF-8
-const char *cross = "\xe2\x9c\x98";
-const char *check = "\xe2\x9c\x94";
-const char *delta = "\xce\x94";
+const char *cross = "\001\xe2\x9c\x98\002";
+const char *check = "\001\xe2\x9c\x94\002";
+const char *delta = "\001\xce\x94\002";
 
 // Parsing states
 const char STATE_NORMAL = 0;
@@ -62,6 +64,7 @@ const char STATE_CMD_SUBSTITUTION = 2;
 
 // Function type signatures
 static void sighandler(int signo);
+static void readline_sigint_handler();
 void print_error();
 void cd(const char *target);
 void cd_back();

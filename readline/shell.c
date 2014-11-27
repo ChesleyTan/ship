@@ -12,16 +12,16 @@
 #include "shell.h"
 
 char cmd_error = CMD_OKAY;
-int child_pid;
+int child_pid, rl_child_pid;
 const char *home;
 char input[INPUT_BUF_SIZE];
-char *prompt;
 char **opts;
 char *tok;
 int optCount, tokIndex;
 char old_pwd[DIR_NAME_MAX_SIZE];
 char state_stack[STATE_STACK_SIZE];
 int stack_pointer = 0;
+char keep_alive = 1;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -33,15 +33,17 @@ static void sighandler(int signo) {
         }
         // If no child process or child process killed
         if (!child_pid || kill(child_pid, 0) < 0) { // Returns -1 on error
-            // TODO make this async-safe
-            // Re-display prompt
-            char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
-            get_prompt(prompt, PROMPT_MAX_SIZE);
-            write(STDOUT_FILENO, "\n", 1);
-            write(STDOUT_FILENO, prompt, strlen(prompt));
-            free(prompt);
+            if (rl_child_pid) {
+                // Kill readline process to refresh prompt
+                kill(rl_child_pid, SIGINT);
+            }
         }
     }
+}
+
+static void readline_sigint_handler() {
+    // Exit gracefully when killed with SIGINT
+    exit(SIGINT_EXIT_CODE);
 }
 
 void print_error() {
@@ -212,7 +214,6 @@ void reset_execute_variables() {
 
 void free_all() {
     // Free dynamically allocated memory
-    free(prompt);
     if (optCount > 0) {
         while (optCount > 0) {
             free(opts[--optCount]);
@@ -298,7 +299,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
 
                 execute();
                 reset_execute_variables();
-                cmd_error = CMD_FINISHED;
+                if (cmd_error >= 0) { // If the command was successful, make the cmd_error flag CMD_FINISHED
+                    cmd_error = CMD_FINISHED;
+                }
             }
             /*
             else if (input[i] == '`') {
@@ -657,32 +660,73 @@ int main() {
     signal(SIGINT, sighandler);
     // TODO allow for possible changing home dir
     home = getenv("HOME");
+    // Initialize old_pwd to the current directory
     getcwd(old_pwd, sizeof(old_pwd));
-    while (!feof(stdin)) {
-        // Initializations
-        prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
-
-        get_prompt(prompt, PROMPT_MAX_SIZE);
-        char *line = readline(prompt);
-        if (line == NULL) {
-            printf("\n[Reached EOF]\n");
-            free(line);
+    while (keep_alive) {
+        int pipes[2]; // Pipe input from child to parent process
+        if (pipe(pipes) < 0) { // Returns -1 if error
+            print_error();
+            exit(1);
+        }
+        rl_child_pid = fork(); // Fork to read input
+        if (!rl_child_pid) {
+            signal(SIGINT, readline_sigint_handler);
+            char *prompt = (char *) malloc(PROMPT_MAX_SIZE * sizeof(char));
+            get_prompt(prompt, PROMPT_MAX_SIZE);
+            close(pipes[0]);
+            char *line = readline(prompt);
+            if (line == NULL) {
+                printf("\n[Reached EOF]\n");
+                // Free dynamically allocated memory before exiting
+                free(prompt);
+                free(line);
+                // Close pipe before exiting
+                close(pipes[1]);
+                exit(EOF_EXIT_CODE);
+            }
+            write(pipes[1], line, INPUT_BUF_SIZE);
+            // Free dynamically allocated memory before exiting
             free(prompt);
+            free(line);
             exit(0);
         }
-        strncpy(input, line, INPUT_BUF_SIZE);
-        input[INPUT_BUF_SIZE - 1] = '\0';
-        printf("input: %s\n", input);
-
-        parse_input(input);
-        if (cmd_error >= 0) {
-            add_history(input);
-        }
         else {
-            printf("Could not add to history: %d\n", cmd_error);
+            int status;
+            waitpid(rl_child_pid, &status, 0);
+            if (WIFEXITED(status)) {
+                status = WEXITSTATUS(status);
+                if (status == EOF_EXIT_CODE) {
+                    // Close pipe before exiting
+                    close(pipes[0]);
+                    close(pipes[1]);
+                    exit(0);
+                }
+                else if (status == SIGINT_EXIT_CODE) {
+                    // Close pipe before relooping
+                    close(pipes[0]);
+                    close(pipes[1]);
+                    // Go to new line before relooping
+                    write(STDOUT_FILENO, "\n", 1);
+                    continue;
+                }
+            }
+            close(pipes[1]);
+            int bytes = read(pipes[0], input, INPUT_BUF_SIZE);
+            close(pipes[0]);
+            // Add null-terminator to input
+            input[bytes] = '\0';
+            printf("input: %s\n", input);
+            parse_input(input);
+            // Add command to history if it was successful
+            if (cmd_error >= 0) {
+                add_history(input);
+            }
+            else {
+                printf("Could not add to history: %d\n", cmd_error);
+            }
+            free_all();
+            wait(NULL);
         }
-        free(line);
-        free_all();
     }
     return 0;
 }
