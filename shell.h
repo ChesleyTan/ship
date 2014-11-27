@@ -36,10 +36,11 @@ static const char *cmd_back = "back";
 
 // Parsing states
 static const char STATE_NORMAL = 0;
-static const char STATE_IN_QUOTES = 1;
-static const char STATE_CMD_SUBSTITUTION = 2;
-static const char STATE_REDIR_STDOUT_TO_FILE = 3;
-static const char STATE_REDIR_APPEND_STDOUT_TO_FILE = 4;
+static const char STATE_IN_SINGLE_QUOTES = 1;
+static const char STATE_IN_DOUBLE_QUOTES = 2;
+static const char STATE_CMD_SUBSTITUTION = 3;
+static const char STATE_REDIR_STDOUT_TO_FILE = 4;
+static const char STATE_REDIR_APPEND_STDOUT_TO_FILE = 5;
 
 // Parsing state terminating delimiters
 static const char *TERM_DELIM_STATE_REDIR_STDOUT_TO_FILE = " ;>\n";

@@ -1,15 +1,14 @@
 // TODO expansion of args for <, dup2 return value check
-// TODO nested quotes matching
+// TODO finish simple redirection
 // TODO inline substitution with ``
-// TODO fg, bg processes (&), jobs
-// TODO command tab-completion
-// TODO simple redirection
-// TODO arithmetic?
 // TODO feature toggle(runtime config?)
-// TODO shells vars dict
-// TODO control statements
+// TODO memory allocation optimization
+// TODO command tab-completion
+// TODO fg, bg processes (&), jobs
 // TODO wildcard?
-// TODO optimization
+// TODO shells vars dict?
+// TODO arithmetic?
+// TODO control statements?
 #include "shell.h"
 #include "prompt.h"
 #include "state_stack.h"
@@ -209,18 +208,20 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         int s_len = strlen(s);
         int s_index = 0;
         char tmp = s[s_index];
-        int l_parsing_state = STATE_NORMAL;
-        while (s_index < s_len && tmp && tmp != '\n' && (tmp != ' ' || l_parsing_state == STATE_IN_QUOTES)) {
-            if (tmp == '\\' && l_parsing_state != STATE_IN_QUOTES) {
+        const char L_STATE_NORMAL = 0;
+        const char L_STATE_IN_QUOTES = 1;
+        int l_parsing_state = L_STATE_NORMAL;
+        while (s_index < s_len && tmp && tmp != '\n' && (tmp != ' ' || l_parsing_state == L_STATE_IN_QUOTES)) {
+            if (tmp == '\\' && l_parsing_state != L_STATE_IN_QUOTES) {
                 keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
                 keyword[keyword_index++] = s[++s_index];
             }
             else if (tmp == '"' || tmp == '\'') {
-                if (l_parsing_state != STATE_IN_QUOTES) {
-                    l_parsing_state = STATE_IN_QUOTES;
+                if (l_parsing_state != L_STATE_IN_QUOTES) {
+                    l_parsing_state = L_STATE_IN_QUOTES;
                 }
                 else {
-                    l_parsing_state = STATE_NORMAL;
+                    l_parsing_state = L_STATE_NORMAL;
                 }
             }
             else {
@@ -241,7 +242,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     // Iterate through each char of input
     while (input[i] && cmd_error != CMD_ERROR) {
         char current_state = get_state();
-        if ((input[i] != '\n' && input[i] != ' ') || (current_state == STATE_IN_QUOTES)) { // Ignore whitespace
+        if ((input[i] != '\n' && input[i] != ' ') || (current_state == STATE_IN_SINGLE_QUOTES || current_state == STATE_IN_DOUBLE_QUOTES)) { // Ignore whitespace
             // Handle escape characters
             if (input[i] == '\\') {
                 // Add char that follows the escape char to token
@@ -250,7 +251,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 tok[++tokIndex] = '\0';
             }
             // Handle semicolons (multiple commands separator)
-            else if (input[i] == ';' && (current_state != STATE_IN_QUOTES)) {
+            else if (input[i] == ';' && (current_state != STATE_IN_SINGLE_QUOTES || current_state != STATE_IN_DOUBLE_QUOTES)) {
                 // Execute commands as we parse input
                 // Add last opt to opts array
                 if (tok[0] != '\0') { // Make sure an argument exists to add
@@ -315,10 +316,25 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 }
             }
             */
-            // Interpret words in quotes as a single token
-            else if (input[i] == '\"' || input[i] == '\'') {
-                if (current_state != STATE_IN_QUOTES) {
-                    if (push_state(STATE_IN_QUOTES) < 0) {
+            // Interpret words in single quotes as a single token
+            else if (input[i] == '\'') {
+                if (current_state != STATE_IN_SINGLE_QUOTES) {
+                    if (push_state(STATE_IN_SINGLE_QUOTES) < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
+                }
+                else {
+                    if (pop_state() < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
+                }
+            }
+            // Interpret words in double quotes as a single token
+            else if (input[i] == '\"') {
+                if (current_state != STATE_IN_DOUBLE_QUOTES) {
+                    if (push_state(STATE_IN_DOUBLE_QUOTES) < 0) {
                         cmd_error = CMD_ERROR;
                         return;
                     }
