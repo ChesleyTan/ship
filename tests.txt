@@ -9,5 +9,7 @@
 ls > ls.txt;
 ls>>ls.txt;
 rm ls.txt;
-ls ~chesley>ls.txt;
+ls ~\c"hesley">ls.txt;
 rm ls.txt;
+ls ~chesley/Desktop;
+ls ~/Desktop;

@@ -1,3 +1,4 @@
+// TODO expansion of args for redirection, dup2 return value check
 // TODO inline substitution with ``
 // TODO fg, bg processes (&), jobs
 // TODO command tab-completion
@@ -351,14 +352,15 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         // Get user-specific home directory
                         char *user_home = passwd_entry->pw_dir;
                         printf("User-specific home directory: %s\n", user_home);
-                        // Reallocate opts array
-                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                        opts[optCount] = (char *) malloc((strlen(user_home) + 1) * sizeof(char));
-                        // Copy token to opts and add null terminator
-                        strncpy(opts[optCount], user_home, strlen(user_home));
-                        opts[optCount][strlen(user_home)] = '\0';
-                        // Increment optCount counter
-                        ++optCount;
+                        // Allocate memory for user_home in tok
+                        tok = (char *) realloc(tok, (tokIndex + strlen(user_home) + 1) * sizeof(char));
+                        // Add user_home to token
+                        tok = strcat(tok, user_home);
+                        // Add null terminator
+                        tok[tokIndex + strlen(user_home)] = '\0';
+                        // Update tokIndex
+                        tokIndex += strlen(user_home);
+
                         // Update input parsing pointer
                         i += strlen(username);
                     }
@@ -425,6 +427,55 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 close(fd);
                 dup2(stdout_dup, STDOUT_FILENO); // Restore stdout
                 close(stdout_dup);
+                free(file);
+                reset_execute_variables();
+                cmd_error = CMD_FINISHED;
+            }
+            // Redirection from file to stdin (<)
+            else if (input[i] == '<') {
+                printf("Got <\n");
+                // Add last opt to opts array
+                if (tok[0] != '\0') { // Make sure an argument exists to add
+                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                    opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+                    // Copy token to opts and add null terminator
+                    strncpy(opts[optCount], tok, strlen(tok));
+                    opts[optCount][strlen(tok)] = '\0';
+                    // Increment optCount counter
+                    ++optCount;
+                }
+                printf("opt: %s\n", opts[0]);
+                printf("optCount: %d\n", optCount);
+                while (input[i+1] == ' ') {
+                    // Advance past the optional whitespace following the redirection symbol
+                    ++i;
+                }
+                const char *extra_delims = ";";
+                char *file = get_next_keyword(extra_delims);
+                printf("Redirect file to stdin: %s\n", file);
+                int fd = open(file, O_RDONLY); // Open file for redirection
+                // TODO use a state for this to get substitution and escapes
+                if (fd < 0) { // fd is -1 on error
+                    print_error();
+                    cmd_error = CMD_ERROR;
+                    // Clean up before exiting
+                    free(file);
+                    reset_execute_variables();
+                    return;
+                }
+                int stdin_dup = dup(STDIN_FILENO);
+                dup2(fd, STDIN_FILENO); // Redirect fd to stdin
+                // Add required NULL argument for exec
+                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                opts[optCount] = NULL;
+                printf("opt: %s\n", opts[0]);
+                printf("optCount: %d\n", optCount);
+                // Advance parsing pointer past file name
+                i += strlen(file);
+                execute();
+                close(fd);
+                dup2(stdin_dup, STDIN_FILENO); // Restore stdin
+                close(stdin_dup);
                 free(file);
                 reset_execute_variables();
                 cmd_error = CMD_FINISHED;
