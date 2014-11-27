@@ -9,3 +9,5 @@
 ls > ls.txt;
 ls>>ls.txt;
 rm ls.txt;
+ls ~chesley>ls.txt;
+rm ls.txt;

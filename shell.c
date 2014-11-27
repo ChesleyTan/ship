@@ -1,4 +1,3 @@
-// TODO advanced tilde
 // TODO inline substitution with ``
 // TODO fg, bg processes (&), jobs
 // TODO command tab-completion
@@ -197,13 +196,50 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
             keyword[keyword_index++] = tmp;
             tmp = input[++index];
         }
+        // Add null-terminator
+        keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
+        keyword[keyword_index] = '\0';
+        return keyword;
+    }
+    inline char *get_escaped(char *s) {
+        char *keyword = (char *) malloc(sizeof(char));
+        int keyword_index = 0;
+        int s_len = strlen(s);
+        int s_index = 0;
+        char tmp = s[s_index];
+        int l_parsing_state = STATE_NORMAL;
+        while (s_index < s_len && tmp && tmp != '\n' && (tmp != ' ' || l_parsing_state == STATE_IN_QUOTES)) {
+            if (tmp == '\\' && l_parsing_state != STATE_IN_QUOTES) {
+                keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
+                keyword[keyword_index++] = s[++s_index];
+            }
+            else if (tmp == '"' || tmp == '\'') {
+                if (l_parsing_state != STATE_IN_QUOTES) {
+                    l_parsing_state = STATE_IN_QUOTES;
+                }
+                else {
+                    l_parsing_state = STATE_NORMAL;
+                }
+            }
+            else {
+                keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
+                keyword[keyword_index++] = tmp;
+            }
+            // Be careful to not iterate past the null-terminator
+            if (s_index < s_len - 1) {
+                tmp = s[s_index + 1];
+            }
+            ++s_index;
+        }
+        // Add null-terminator
         keyword = (char *) realloc(keyword, (keyword_index + 1) * sizeof(char));
         keyword[keyword_index] = '\0';
         return keyword;
     }
     // Iterate through each char of input
-    while (input[i]) {
-        if ((input[i] != '\n' && input[i] != ' ') || (get_state() == STATE_IN_QUOTES)) { // Ignore whitespace
+    while (input[i] && cmd_error != CMD_ERROR) {
+        char current_state = get_state();
+        if ((input[i] != '\n' && input[i] != ' ') || (current_state == STATE_IN_QUOTES)) { // Ignore whitespace
             // Handle escape characters
             if (input[i] == '\\') {
                 // Add char that follows the escape char to token
@@ -212,7 +248,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 tok[++tokIndex] = '\0';
             }
             // Handle semicolons (multiple commands separator)
-            else if (input[i] == ';' && get_state() == STATE_NORMAL) {
+            else if (input[i] == ';' && (current_state != STATE_IN_QUOTES)) {
                 // Execute commands as we parse input
                 // Add last opt to opts array
                 if (tok[0] != '\0') { // Make sure an argument exists to add
@@ -238,7 +274,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
             /*
             else if (input[i] == '`') {
                 printf("Found backtick\n");
-                if (get_state() != STATE_CMD_SUBSTITUTION) {
+                if (current_state != STATE_CMD_SUBSTITUTION) {
                     if (push_state(STATE_CMD_SUBSTITUTION) < 0) {
                         cmd_error = CMD_ERROR;
                         return;
@@ -278,7 +314,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
             */
             // Interpret words in quotes as a single token
             else if (input[i] == '\"' || input[i] == '\'') {
-                if (get_state() != STATE_IN_QUOTES) {
+                if (current_state != STATE_IN_QUOTES) {
                     if (push_state(STATE_IN_QUOTES) < 0) {
                         cmd_error = CMD_ERROR;
                         return;
@@ -291,16 +327,49 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     }
                 }
             }
-            // Substitute ~ with $HOME, if applicable
+            // Tilde (~) expansion
             else if (input[i] == '~') {
-                // Allocate memory for $HOME in tok
-                tok = (char *) realloc(tok, (tokIndex + strlen(home) + 1) * sizeof(char));
-                // Add $HOME to token
-                tok = strcat(tok, home);
-                // Add null terminator
-                tok[tokIndex + strlen(home)] = '\0';
-                // Update tokIndex
-                tokIndex += strlen(home);
+                char *extra_delims = "/;>";
+                char *username = get_next_keyword(extra_delims);
+                // If no user was specified, expand $HOME
+                if (strlen(username) == 0) {
+                    // Allocate memory for $HOME in tok
+                    tok = (char *) realloc(tok, (tokIndex + strlen(home) + 1) * sizeof(char));
+                    // Add $HOME to token
+                    tok = strcat(tok, home);
+                    // Add null terminator
+                    tok[tokIndex + strlen(home)] = '\0';
+                    // Update tokIndex
+                    tokIndex += strlen(home);
+                }
+                // A user was specified, so expand the user-specific home directory
+                else {
+                    char *escaped_username = get_escaped(username);
+                    struct passwd *passwd_entry = getpwnam(escaped_username);
+                    // If user is found, expand the user's home directory into opts
+                    if (passwd_entry != NULL) {
+                        // Get user-specific home directory
+                        char *user_home = passwd_entry->pw_dir;
+                        printf("User-specific home directory: %s\n", user_home);
+                        // Reallocate opts array
+                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+                        opts[optCount] = (char *) malloc((strlen(user_home) + 1) * sizeof(char));
+                        // Copy token to opts and add null terminator
+                        strncpy(opts[optCount], user_home, strlen(user_home));
+                        opts[optCount][strlen(user_home)] = '\0';
+                        // Increment optCount counter
+                        ++optCount;
+                        // Update input parsing pointer
+                        i += strlen(username);
+                    }
+                    // Otherwise, print error
+                    else {
+                        fprintf(stderr, "[Error]: Could not find home directory for user %s\n", escaped_username);
+                        cmd_error = CMD_ERROR;
+                    }
+                    free(escaped_username);
+                }
+                free(username);
             }
             // Redirection of stdout to file (>)
             else if (input[i] == '>') {
@@ -386,8 +455,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     }
     // If a command was supplied, then try to execute it
     // !(optCount == 0 && tokIndex == 0) ensures that there was
-    // at least one non-whitespace character in the input
-    if (i >= 1 && !(optCount == 0 && tokIndex == 0)) {
+    // at least one non-whitespace character in the input.
+    // In addition, the input must be valid up to this point
+    if (i >= 1 && !(optCount == 0 && tokIndex == 0) && cmd_error != CMD_ERROR) {
         // Add last opt to opts array
         if (tok[0] != '\0') { // Make sure an argument exists to add
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
