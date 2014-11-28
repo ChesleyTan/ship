@@ -1,4 +1,3 @@
-// TODO inline functions for common actions in parse_input
 // TODO finish simple redirection
 // TODO feature toggle(runtime config?)
 // TODO memory allocation optimization
@@ -203,6 +202,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     cmd_nest_level = 0;
     cmd_substitution_buffer = (char *) malloc(CMD_SUBSTITUTION_BUF_SIZE * sizeof(char));
     cmd_substitution_buffer_index = 0;
+
     inline char *get_next_keyword(const char *extra_delims) {
         char *keyword = (char *) malloc(sizeof(char));
         int keyword_index = 0;
@@ -218,6 +218,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         keyword[keyword_index] = '\0';
         return keyword;
     }
+
     inline char *get_escaped(char *s) {
         // NOTE: does not support nested quotes
         char *keyword = (char *) malloc(sizeof(char));
@@ -256,15 +257,48 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         keyword[keyword_index] = '\0';
         return keyword;
     }
+
+    inline int add_last_opt_to_opts_array_and_clear_tok() {
+        if (tok[0] != '\0') { // Make sure an argument exists to add
+            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+            opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
+            // Copy token to opts and add null terminator
+            strncpy(opts[optCount], tok, strlen(tok));
+            opts[optCount][strlen(tok)] = '\0';
+            // Increment optCount counter
+            ++optCount;
+            // Reset tok
+            tok[0] = '\0';
+            // Reset tokIndex
+            tokIndex = 0;
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    inline void add_required_null_for_exec() {
+        // Add required NULL argument for exec
+        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
+        opts[optCount] = NULL;
+    }
+
+    inline void copy_current_char_to_tok() {
+        tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
+        tok[tokIndex] = input[i];
+        tok[++tokIndex] = '\0';
+    }
+
     // Iterate through each char of input
     while (input[i] && cmd_error != CMD_ERROR) {
         char current_state = get_state();
+        // Ignore whitespace
         if ((input[i] != '\n' && input[i] != ' ')
             || (current_state == STATE_IN_SINGLE_QUOTES
                 || current_state == STATE_IN_DOUBLE_QUOTES
                 || current_state == STATE_CMD_SUBSTITUTION)
-        ) { // Ignore whitespace
+        ) {
             // State-specific handlers, persist until terminating delimeter
+            // If in command substitution state, keep appending to tok
             if (current_state == STATE_CMD_SUBSTITUTION
                 && input[i] != '`'
                 && (input[i] != ')'
@@ -296,20 +330,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     )
             ) {
                 // Execute commands as we parse input
-                // Add last opt to opts array
-                if (tok[0] != '\0') { // Make sure an argument exists to add
-                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                    opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                    // Copy token to opts and add null terminator
-                    strncpy(opts[optCount], tok, strlen(tok));
-                    opts[optCount][strlen(tok)] = '\0';
-                    // Increment optCount counter
-                    ++optCount;
-                }
+                add_last_opt_to_opts_array_and_clear_tok();
 
-                // Add required NULL argument for exec
-                opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                opts[optCount] = NULL;
+                add_required_null_for_exec();
 
                 execute();
                 reset_execute_variables();
@@ -368,12 +391,13 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                             exit(CMD_SUBSTITUTION_FAIL_EXIT_CODE);
                         }
                         close(pipes[0]);
-                        freopen("/dev/null", "w", stderr); // Redirect stderr to /dev/null
+                        FILE *dev_null = freopen("/dev/null", "w", stderr); // Redirect stderr to /dev/null
                         // Silence child debug output
                         debug_output = 0;
                         parse_input(l_input);
                         free_all();
                         close(pipes[1]);
+                        fclose(dev_null);
                         exit(cmd_error);
                     }
                     else {
@@ -530,20 +554,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         cmd_error = CMD_ERROR;
                         return;
                     }
-                    // Add last opt to opts array
-                    if (tok[0] != '\0') { // Make sure an argument exists to add
-                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                        opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                        // Copy token to opts and add null terminator
-                        strncpy(opts[optCount], tok, strlen(tok));
-                        opts[optCount][strlen(tok)] = '\0';
-                        // Increment optCount counter
-                        ++optCount;
-                        // Reset tok
-                        tok[0] = '\0';
-                        // Reset tokIndex
-                        tokIndex = 0;
-
+                    if (add_last_opt_to_opts_array_and_clear_tok()) {
                         if (debug_output) {
                             printf("opt: %s\n", opts[0]);
                             printf("optCount: %d\n", optCount);
@@ -568,9 +579,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         return;
                     }
                     // Copy current char to tok to complete filename
-                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                    tok[tokIndex] = input[i];
-                    tok[++tokIndex] = '\0';
+                    copy_current_char_to_tok();
                     // Reference tok as file
                     char *file = tok;
                     if (debug_output)
@@ -595,9 +604,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         reset_execute_variables();
                         return;
                     }
-                    // Add required NULL argument for exec
-                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                    opts[optCount] = NULL;
+                    add_required_null_for_exec();
                     execute();
                     close(fd);
                     if (dup2(stdout_dup, STDOUT_FILENO) < 0) { // Restore stdout
@@ -626,20 +633,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         cmd_error = CMD_ERROR;
                         return;
                     }
-                    // Add last opt to opts array
-                    if (tok[0] != '\0') { // Make sure an argument exists to add
-                        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                        opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-                        // Copy token to opts and add null terminator
-                        strncpy(opts[optCount], tok, strlen(tok));
-                        opts[optCount][strlen(tok)] = '\0';
-                        // Increment optCount counter
-                        ++optCount;
-                        // Reset tok
-                        tok[0] = '\0';
-                        // Reset tokIndex
-                        tokIndex = 0;
-
+                    if (add_last_opt_to_opts_array_and_clear_tok()) {
                         if (debug_output) {
                             printf("opt: %s\n", opts[0]);
                             printf("optCount: %d\n", optCount);
@@ -657,9 +651,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         return;
                     }
                     // Copy current char to tok to complete filename
-                    tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                    tok[tokIndex] = input[i];
-                    tok[++tokIndex] = '\0';
+                    copy_current_char_to_tok();
                     // Reference tok as file
                     char *file = tok;
                     if (debug_output)
@@ -684,9 +676,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         reset_execute_variables();
                         return;
                     }
-                    // Add required NULL argument for exec
-                    opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-                    opts[optCount] = NULL;
+                    add_required_null_for_exec();
                     if (debug_output) {
                         printf("opt: %s\n", opts[0]);
                         printf("optCount: %d\n", optCount);
@@ -709,9 +699,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
             }
             // Copy char to var tok
             else {
-                tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                tok[tokIndex] = input[i];
-                tok[++tokIndex] = '\0';
+                copy_current_char_to_tok();
             }
         }
         // Case when we've reached the end of a word
@@ -739,20 +727,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         if (debug_output) {
             printf("Executing standalone command\n");
         }
-        // Add last opt to opts array
-        if (tok[0] != '\0') { // Make sure an argument exists to add
-            opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-            opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
-            // Copy token to opts and add null terminator
-            strncpy(opts[optCount], tok, strlen(tok));
-            opts[optCount][strlen(tok)] = '\0';
-            // Increment optCount counter
-            ++optCount;
-        }
+        add_last_opt_to_opts_array_and_clear_tok();
 
-        // Add required NULL argument for exec
-        opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
-        opts[optCount] = NULL;
+        add_required_null_for_exec();
 
         execute();
     }
