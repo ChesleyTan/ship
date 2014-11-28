@@ -29,6 +29,7 @@
 #define SIGINT_EXIT_CODE 11
 #define CMD_SUBSTITUTION_FAIL_EXIT_CODE 12
 #define MAX_CMD_SUBSTITUTION_SIZE 1024
+#define CMD_SUBSTITUTION_BUF_SIZE 512
 
 // Shell built-in functions
 static const char *cmd_exit = "exit";
@@ -72,4 +73,8 @@ extern char *tok;
 extern int optCount, tokIndex;
 extern char old_pwd[DIR_NAME_MAX_SIZE];
 extern char keep_alive;
+extern char debug_output;
+extern int cmd_nest_level;
+extern char *cmd_substitution_buffer;
+extern size_t cmd_substitution_buffer_index;
 

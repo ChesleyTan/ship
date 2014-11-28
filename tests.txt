@@ -23,4 +23,9 @@ cat<~/ls.txt;
 cat<<<~/ls.txt ~/ls.txt ~/ls.txt;
 rm ~/ls.txt;
 echo `echo "Hello world! I\'m inside a command substitution right now!"`;
+echo `python -c "print 5+5"`;
+echo `cat < tests.txt`;
+echo -ne $(ls);
+$(echo -ne ls);
+echo hello $(echo world$(echo !));
 

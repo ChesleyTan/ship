@@ -1,5 +1,7 @@
+// TODO cmd subst exit code check
+// TODO inline functions for common actions in parse_input
+// TODO accept trailing newlines in input e.g. $(echo ls) or `echo ls`
 // TODO finish simple redirection
-// TODO check for memory leaks in `` command substitution
 // TODO feature toggle(runtime config?)
 // TODO memory allocation optimization
 // TODO command tab-completion
@@ -22,6 +24,9 @@ int optCount, tokIndex;
 char old_pwd[DIR_NAME_MAX_SIZE];
 char keep_alive = 1;
 char debug_output = 1;
+int cmd_nest_level = 0;
+char *cmd_substitution_buffer;
+size_t cmd_substitution_buffer_index = 0;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -167,6 +172,12 @@ void reset_execute_variables() {
     optCount = 0;
     // Reinstantiate opts
     opts = (char **) malloc(sizeof(char *));
+    // Reset command substitution buffer
+    cmd_substitution_buffer[0] = '\0';
+    // Reset command substitution buffer index
+    cmd_substitution_buffer_index = 0;
+    // Reset command nest level
+    cmd_nest_level = 0;
 }
 
 void free_all() {
@@ -178,6 +189,7 @@ void free_all() {
     }
     free(tok);
     free(opts);
+    free(cmd_substitution_buffer);
 }
 
 void parse_input(char input[INPUT_BUF_SIZE]) {
@@ -190,6 +202,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     int i = 0;
     clear_state_stack();
     cmd_error = CMD_OKAY; // Reset the error flag
+    cmd_nest_level = 0;
+    cmd_substitution_buffer = (char *) malloc(CMD_SUBSTITUTION_BUF_SIZE * sizeof(char));
+    cmd_substitution_buffer_index = 0;
     inline char *get_next_keyword(const char *extra_delims) {
         char *keyword = (char *) malloc(sizeof(char));
         int keyword_index = 0;
@@ -206,6 +221,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         return keyword;
     }
     inline char *get_escaped(char *s) {
+        // NOTE: does not support nested quotes
         char *keyword = (char *) malloc(sizeof(char));
         int keyword_index = 0;
         int s_len = strlen(s);
@@ -250,12 +266,23 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                 || current_state == STATE_IN_DOUBLE_QUOTES
                 || current_state == STATE_CMD_SUBSTITUTION)
         ) { // Ignore whitespace
-            // State-specific handlers
-            if (current_state == STATE_CMD_SUBSTITUTION && input[i] != '`') {
-                // Copy char to var tok
-                tok = (char *) realloc(tok, (tokIndex + 2) * sizeof(char));
-                tok[tokIndex] = input[i];
-                tok[++tokIndex] = '\0';
+            // State-specific handlers, persist until terminating delimeter
+            if (current_state == STATE_CMD_SUBSTITUTION
+                && input[i] != '`'
+                && (input[i] != ')'
+                    || (input[i] == ')'
+                        && cmd_nest_level-- > 0) // Decrement nest level if ')' found
+                   )
+            ) {
+                // Allow for nested command substitutions using $()
+                if (input[i] == '$' && input[i+1] == '(') {
+                    ++cmd_nest_level; // Increment nest level if "$(" found
+                }
+                if (cmd_substitution_buffer_index < CMD_SUBSTITUTION_BUF_SIZE - 1) {
+                    // Copy char to command substitution buffer
+                    cmd_substitution_buffer[cmd_substitution_buffer_index] = input[i];
+                    cmd_substitution_buffer[++cmd_substitution_buffer_index] = '\0';
+                }
             }
             // Handle escape characters
             else if (input[i] == '\\') {
@@ -292,16 +319,29 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     cmd_error = CMD_FINISHED;
                 }
             }
-            // Handle command output expansion with backticks(`)
-            else if (input[i] == '`') {
-                if (debug_output)
-                    printf("Found backtick\n");
+            // Handle command output expansion with backticks(`) or $()
+            else if (input[i] == '`'
+                || (input[i] == '$'
+                    && input[i+1] == '('
+                    && current_state != STATE_CMD_SUBSTITUTION)
+                || (input[i] == ')'
+                    && current_state == STATE_CMD_SUBSTITUTION
+                    && cmd_nest_level <= 0)
+            ) {
+                if (debug_output && (input[i] == '`' || input[i] == '$'))
+                    printf("Found backtick or \"$(\"\n");
+                // Enter command substitution state
                 if (current_state != STATE_CMD_SUBSTITUTION) {
                     if (push_state(STATE_CMD_SUBSTITUTION) < 0) {
                         cmd_error = CMD_ERROR;
                         return;
                     }
+                    // Advance past the '(' in "$(", if applicable
+                    if (input[i+1] == '(') {
+                        ++i;
+                    }
                 }
+                // Perform command substitution
                 else {
                     if (pop_state() < 0) {
                         cmd_error = CMD_ERROR;
@@ -310,9 +350,12 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     if (debug_output) {
                         printf("tok: %s\n", tok);
                         printf("cmd: %s\n", opts[0]);
+                        printf("cmd_substitution_buffer: %s\n", cmd_substitution_buffer);
                     }
-                    char *l_input = tok;
+                    // Point child's input to cmd_substitution_buffer
+                    char *l_input = cmd_substitution_buffer;
 
+                    // Pipe from child to parent
                     int pipes[2];
                     if (pipe(pipes) < 0) { // Returns -1 if error
                         print_error();
@@ -328,8 +371,11 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         }
                         close(pipes[0]);
                         freopen("/dev/null", "w", stderr); // Redirect stderr to /dev/null
+                        // Silence child debug output
+                        debug_output = 0;
                         parse_input(l_input);
                         free_all();
+                        close(pipes[1]);
                         exit(cmd_error);
                     }
                     else {
@@ -344,10 +390,15 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         }
                         output[bytes] = '\0';
                         if (debug_output)
-                            printf("output: %s\n", output);
-                        tok = (char *) realloc(tok, (MAX_CMD_SUBSTITUTION_SIZE + 1) * sizeof(char));
-                        strncpy(tok, output, MAX_CMD_SUBSTITUTION_SIZE);
-                        tok[MAX_CMD_SUBSTITUTION_SIZE - 1] = '\0';
+                            printf("output: %s$\n", output);
+                        // Append the output to tok
+                        // Retain existing string in tok when resizing and appending
+                        size_t remaining_tok_len = strlen(tok);
+                        tok = (char *) realloc(tok, (MAX_CMD_SUBSTITUTION_SIZE + 1 + remaining_tok_len) * sizeof(char));
+                        // Append output to tok
+                        strncat(tok, output, MAX_CMD_SUBSTITUTION_SIZE);
+                        // Add null-terminator
+                        tok[MAX_CMD_SUBSTITUTION_SIZE + remaining_tok_len - 1] = '\0';
                         if (tok[0] != '\0') { // Make sure an argument exists to add
                             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
                             opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
@@ -360,10 +411,16 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                             tok[0] = '\0';
                             // Reset tokIndex
                             tokIndex = 0;
-                            close(pipes[0]);
-                            free(output);
-                            wait(NULL);
                         }
+                        // Reset command substitution buffer
+                        cmd_substitution_buffer[0] = '\0';
+                        // Reset command substitution buffer index
+                        cmd_substitution_buffer_index = 0;
+                        // Reset command nest level
+                        cmd_nest_level = 0;
+                        close(pipes[0]);
+                        free(output);
+                        wait(NULL);
                     }
                     cmd_error = CMD_FINISHED;
                 }
@@ -676,8 +733,6 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     if (i >= 1 && !(optCount == 0 && tokIndex == 0) && cmd_error != CMD_ERROR) {
         if (debug_output) {
             printf("Executing standalone command\n");
-            printf("optCount: %d\n", optCount);
-            printf("tokIndex: %d\n", tokIndex);
         }
         // Add last opt to opts array
         if (tok[0] != '\0') { // Make sure an argument exists to add
@@ -722,6 +777,7 @@ void get_stdout_execute(char *container, size_t container_size) {
             container[0] = '\0';
         }
         // Note: child automatically exits after successful execvp
+        close(pipes[1]);
         exit(1);
     }
     else {
@@ -766,10 +822,12 @@ int main() {
                 close(pipes[1]);
                 exit(EOF_EXIT_CODE);
             }
-            write(pipes[1], line, INPUT_BUF_SIZE);
+            size_t write_size = (INPUT_BUF_SIZE > strlen(line)) ? strlen(line) : INPUT_BUF_SIZE;
+            write(pipes[1], line, write_size);
             // Free dynamically allocated memory before exiting
             free(prompt);
             free(line);
+            close(pipes[1]);
             exit(0);
         }
         else {
