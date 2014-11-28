@@ -1,6 +1,4 @@
-// TODO cmd subst exit code check
 // TODO inline functions for common actions in parse_input
-// TODO accept trailing newlines in input e.g. $(echo ls) or `echo ls`
 // TODO finish simple redirection
 // TODO feature toggle(runtime config?)
 // TODO memory allocation optimization
@@ -381,6 +379,10 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     else {
                         int status;
                         waitpid(l_child_pid, &status, 0);
+                        if (WIFEXITED(status)) {
+                            // Set cmd_error flag to exit status of cmd substitution process
+                            cmd_error = WEXITSTATUS(status);
+                        }
                         close(pipes[1]);
                         char *output = (char *) malloc(MAX_CMD_SUBSTITUTION_SIZE * sizeof(char));
                         int bytes = read(pipes[0], output, MAX_CMD_SUBSTITUTION_SIZE);
@@ -389,6 +391,10 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                             return;
                         }
                         output[bytes] = '\0';
+                        // Trim trailing newlines by replacing them with null characters
+                        while (bytes > 0 && output[--bytes] == '\n') {
+                            output[bytes] = '\0';
+                        }
                         if (debug_output)
                             printf("output: %s$\n", output);
                         // Append the output to tok
@@ -422,7 +428,6 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         free(output);
                         wait(NULL);
                     }
-                    cmd_error = CMD_FINISHED;
                 }
             }
             // Interpret words in single quotes as a single token

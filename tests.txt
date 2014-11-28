@@ -28,4 +28,5 @@ echo `cat < tests.txt`;
 echo -ne $(ls);
 $(echo -ne ls);
 echo hello $(echo world$(echo !));
+echo $(ls;pwd);
 
