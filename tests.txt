@@ -22,4 +22,5 @@ cat     <   ~/ls.txt;
 cat<~/ls.txt;
 cat<<<~/ls.txt ~/ls.txt ~/ls.txt;
 rm ~/ls.txt;
+echo `echo "Hello world! I\'m inside a command substitution right now!"`;
 

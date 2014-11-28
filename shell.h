@@ -15,7 +15,7 @@
 #include <readline/history.h>
 
 // Constants
-#define INPUT_BUF_SIZE 512
+#define INPUT_BUF_SIZE 1024
 #define DIR_NAME_MAX_SIZE 768
 #define TRUE 1
 #define FALSE 0
@@ -27,6 +27,7 @@
 #define CMD_ERROR_SIGNAL SIGUSR1
 #define EOF_EXIT_CODE 10
 #define SIGINT_EXIT_CODE 11
+#define CMD_SUBSTITUTION_FAIL_EXIT_CODE 12
 #define MAX_CMD_SUBSTITUTION_SIZE 1024
 
 // Shell built-in functions
