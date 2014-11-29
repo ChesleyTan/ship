@@ -1,4 +1,4 @@
-// TODO chained piping
+// TODO Chaining <, >, and >>
 // TODO feature toggle(runtime config?)
 // TODO memory allocation optimization
 // TODO command tab-completion
@@ -24,8 +24,10 @@ char debug_output = 1;
 int cmd_nest_level = 0;
 char *cmd_substitution_buffer;
 size_t cmd_substitution_buffer_index = 0;
-char *pipe_target_buffer;
-size_t pipe_target_buffer_index = 0;
+int stdin_dup = STDIN_FILENO;
+int stdout_dup = STDOUT_FILENO;
+int stderr_dup = STDERR_FILENO;
+int global_pipes[2] = {NO_FD, NO_FD};
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -54,6 +56,83 @@ void print_error() {
     if (errno) {
         fprintf(stderr, "[Error %d]: %s\n", errno, strerror(errno));
     }
+}
+
+int save_stdin() {
+    // Only update if the backup is stale
+    if (stdin_dup == STDIN_FILENO) {
+        if (debug_output)
+            fprintf(stderr, "Updating stdin_dup\n");
+        if ((stdin_dup = dup(STDIN_FILENO)) < 0) {
+            print_error();
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int save_stdout() {
+    // Only update if the backup is stale
+    if (stdout_dup == STDOUT_FILENO) {
+        if (debug_output)
+            fprintf(stderr, "Updating stdout_dup\n");
+        if ((stdout_dup = dup(STDOUT_FILENO)) < 0) {
+            print_error();
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int save_stderr() {
+    // Only update if the backup is stale
+    if (stderr_dup == STDERR_FILENO) {
+        if (debug_output)
+            fprintf(stderr, "Updating stderr_dup\n");
+        if ((stderr_dup = dup(STDERR_FILENO)) < 0) {
+            print_error();
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int save_default_fds() {
+    if (save_stdin() == 0 && save_stdout() == 0 && save_stderr() == 0) {
+        return 0;
+    }
+    return -1;
+}
+
+int restore_stdin() {
+    if (dup2(stdin_dup, STDIN_FILENO) < 0) {
+        print_error();
+        return -1;
+    }
+    return 0;
+}
+
+int restore_stdout() {
+    if (dup2(stdout_dup, STDOUT_FILENO) < 0) {
+        print_error();
+        return -1;
+    }
+    return 0;
+}
+
+int restore_stderr() {
+    if (dup2(stderr_dup, STDERR_FILENO) < 0) {
+        print_error();
+        return -1;
+    }
+    return 0;
+}
+
+int restore_default_fds() {
+    if (restore_stdin() == 0 && restore_stdout() == 0 && restore_stderr() == 0) {
+        return 0;
+    }
+    return -1;
 }
 
 void cd(const char *target) {
@@ -115,6 +194,7 @@ void execute() {
     if (strcmp(opts[0], cmd_exit) == 0) {
         printf("Exiting...\n");
         free_all();
+        clear_history();
         exit(0);
     }
     else if (strcmp(opts[0], cmd_cd) == 0){
@@ -155,6 +235,17 @@ void execute() {
         printf("<~~~~ End of Output ~~~~~>\n");
 }
 
+void reset_global_pipes() {
+    if (global_pipes[0] != NO_FD) {
+        close(global_pipes[0]);
+    }
+    if (global_pipes[1] != NO_FD) {
+        close(global_pipes[1]);
+    }
+    global_pipes[0] = NO_FD;
+    global_pipes[1] = NO_FD;
+}
+
 void reset_execute_variables() {
     // Reset tok
     tok[0] = '\0';
@@ -177,10 +268,6 @@ void reset_execute_variables() {
     cmd_substitution_buffer_index = 0;
     // Reset command nest level
     cmd_nest_level = 0;
-    // Reset pipe target buffer
-    pipe_target_buffer[0] = '\0';
-    // Reset pipe target buffer index
-    pipe_target_buffer_index = 0;
 }
 
 void free_all() {
@@ -193,7 +280,7 @@ void free_all() {
     free(tok);
     free(opts);
     free(cmd_substitution_buffer);
-    free(pipe_target_buffer);
+    reset_global_pipes();
 }
 
 void parse_input(char input[INPUT_BUF_SIZE]) {
@@ -209,8 +296,9 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     cmd_nest_level = 0;
     cmd_substitution_buffer = (char *) malloc(CMD_SUBSTITUTION_BUF_SIZE * sizeof(char));
     cmd_substitution_buffer_index = 0;
-    pipe_target_buffer = (char *) malloc(PIPE_TARGET_BUF_SIZE * sizeof(char));
-    pipe_target_buffer_index = 0;
+    if (save_default_fds() < 0) {
+        return;
+    }
 
     inline char *get_next_keyword(const char *extra_delims) {
         char *keyword = (char *) malloc(sizeof(char));
@@ -304,8 +392,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         if ((input[i] != '\n' && input[i] != ' ')
             || (current_state == STATE_IN_SINGLE_QUOTES
                 || current_state == STATE_IN_DOUBLE_QUOTES
-                || current_state == STATE_CMD_SUBSTITUTION
-                || current_state == STATE_PIPE)
+                || current_state == STATE_CMD_SUBSTITUTION)
         ) {
             // State-specific handlers, persist until terminating delimeter
             // If in command substitution state, keep appending to tok
@@ -324,16 +411,6 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     // Copy char to command substitution buffer
                     cmd_substitution_buffer[cmd_substitution_buffer_index] = input[i];
                     cmd_substitution_buffer[++cmd_substitution_buffer_index] = '\0';
-                }
-            }
-            else if (current_state == STATE_PIPE
-                && (strchr(TERM_DELIM_STATE_PIPE, input[i+1]) == NULL
-                    && input[i+1] != '\0')
-            ) {
-                if (pipe_target_buffer_index < PIPE_TARGET_BUF_SIZE - 1) {
-                    // Copy char to pipe target buffer
-                    pipe_target_buffer[pipe_target_buffer_index] = input[i];
-                    pipe_target_buffer[++pipe_target_buffer_index] = '\0';
                 }
             }
             // Handle escape characters
@@ -611,8 +688,8 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         reset_execute_variables();
                         return;
                     }
-                    int stdout_dup;
-                    if ((stdout_dup = dup(STDOUT_FILENO)) < 0) {
+                    int l_stdout_dup;
+                    if ((l_stdout_dup = dup(STDOUT_FILENO)) < 0) {
                         print_error();
                         cmd_error = CMD_ERROR;
                         reset_execute_variables();
@@ -627,13 +704,13 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     add_required_null_for_exec();
                     execute();
                     close(fd);
-                    if (dup2(stdout_dup, STDOUT_FILENO) < 0) { // Restore stdout
+                    if (dup2(l_stdout_dup, STDOUT_FILENO) < 0) { // Restore stdout
                         print_error();
                         cmd_error = CMD_ERROR;
                         reset_execute_variables();
                         return;
                     }
-                    close(stdout_dup);
+                    close(l_stdout_dup);
                     reset_execute_variables();
                     // If no error came up during execution, then set the cmd_error flag to CMD_FINISHED
                     if (cmd_error >= 0) {
@@ -717,110 +794,44 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     }
                 }
             }
-            else if (input[i] == '|'
-                || (current_state == STATE_PIPE
-                    && (strchr(TERM_DELIM_STATE_PIPE, input[i+1]) != NULL
-                        || input[i+1] == '\0')
-                    )
-            ) {
-                if (input[i] == '|') {
+            else if (input[i] == '|') {
                     if (debug_output)
                         printf("Got |\n");
-                    if (push_state(STATE_PIPE) < 0) {
-                        cmd_error = CMD_ERROR;
-                        return;
-                    }
                     if (add_tok_to_opts_array_and_clear_tok()) {
                         if (debug_output) {
                             printf("opt: %s\n", opts[0]);
                             printf("optCount: %d\n", optCount);
                         }
                     }
-                    while (input[i+1] == ' ') {
-                        // Advance past the optional whitespace following the redirection symbol
-                        ++i;
-                    }
-                }
-                else {
-                    if (pop_state() < 0) {
-                        cmd_error = CMD_ERROR;
-                        return;
-                    }
-                    // Copy current char to pipe_target_buffer to complete target command
-                    if (pipe_target_buffer_index < PIPE_TARGET_BUF_SIZE - 1) {
-                        pipe_target_buffer[pipe_target_buffer_index] = input[i];
-                        pipe_target_buffer[++pipe_target_buffer_index] = '\0';
-                    }
-                    // Reference pipe_target_buffer as target_cmd
-                    char *target_cmd = pipe_target_buffer;
-                    if (debug_output) {
-                        printf("Pipe to command: %s\n", target_cmd);
-                        printf("optCount: %d\n", optCount);
-                        printf("opts[0]: %s\n", opts[0]);
+                    else {
+                        if (optCount == 0) {
+                            fprintf(stderr, "[Error]: Invalid pipe.\n");
+                            return;
+                        }
                     }
                     add_required_null_for_exec();
-                    int pipes[2];
-                    if (pipe(pipes) < 0) { // Returns -1 if error
+                    if (save_default_fds() < 0) {
+                        return;
+                    }
+                    reset_global_pipes();
+                    if (pipe(global_pipes) < 0) { // Returns -1 if error
                         print_error();
                         return;
                     }
-                    int child_pid = fork();
-                    if (!child_pid) {
-                        close(pipes[0]);
-                        // Redirect stdout to pipes[1]
-                        if (dup2(pipes[1], STDOUT_FILENO) < 0) {
-                            print_error();
-                            exit(PIPE_FAIL_EXIT_CODE);
-                        }
-                        if (execvp(opts[0], opts) < 0) { // Automatically exits on successful exec
-                            print_error();
-                        }
-                        exit(PIPE_FAIL_EXIT_CODE);
-                    }
-                    else {
-                        int status;
-                        waitpid(child_pid, &status, 0);
-                        if (WIFEXITED(status)) {
-                            if (WEXITSTATUS(status) == PIPE_FAIL_EXIT_CODE) {
-                                cmd_error = CMD_ERROR;
-                            }
-                        }
-                        close(pipes[1]);
-                    }
-                    // Check if first command was successful; if not, abort piping
-                    if (cmd_error < 0) {
-                        reset_execute_variables();
+                    if (dup2(global_pipes[1], STDOUT_FILENO) < 0) {
+                        print_error();
                         return;
                     }
-                    int child2_pid = fork();
-                    if (!child2_pid) {
-                        // Redirect pipes[0] to stdin
-                        if (dup2(pipes[0], STDIN_FILENO) < 0) {
-                            print_error();
-                            exit(PIPE_FAIL_EXIT_CODE);
-                        }
-                        close(pipes[1]);
-                        // Silence child debug output
-                        debug_output = 0;
-                        parse_input(target_cmd);
-                        free_all();
-                        // TODO may need to remove this for chaining
-                        close(pipes[0]);
-                        exit(cmd_error);
-                    }
-                    else {
-                        int status;
-                        waitpid(child2_pid, &status, 0);
-                        if (WIFEXITED(status)) {
-                            cmd_error = WEXITSTATUS(status);
-                        }
-                        close(pipes[0]);
-                    }
+                    execute();
                     reset_execute_variables();
-                    if (cmd_error >= 0) {
-                        cmd_error = CMD_FINISHED;
+                    if (restore_stdout() < 0) {
+                        return;
                     }
-                }
+                    close(global_pipes[1]);
+                    if (dup2(global_pipes[0], STDIN_FILENO) < 0) {
+                        print_error();
+                        return;
+                    }
             }
             // Copy char to var tok
             else {
@@ -863,8 +874,12 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
             cmd_error = CMD_BLANK;
         }
     }
+    if (restore_default_fds() < 0) {
+        return;
+    }
 }
 
+/*
 void get_stdout_execute(char *container, size_t container_size) {
     int pipes[2];
     if (pipe(pipes) < 0) { // Returns -1 if error
@@ -899,6 +914,7 @@ void get_stdout_execute(char *container, size_t container_size) {
         wait(NULL);
     }
 }
+*/
 
 int main() {
     signal(CMD_ERROR_SIGNAL, sighandler);

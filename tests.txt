@@ -30,3 +30,5 @@ $(echo -ne ls);
 echo hello $(echo world$(echo !));
 echo $(ls;pwd);
 echo "You trying to get the pipe? -- J.R. Smith" | cat;
+ls -ahl | cat -n | sort -r > output.txt;
+rm output.txt;
