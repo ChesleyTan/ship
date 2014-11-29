@@ -1,4 +1,4 @@
-// TODO finish simple redirection
+// TODO chained piping
 // TODO feature toggle(runtime config?)
 // TODO memory allocation optimization
 // TODO command tab-completion
@@ -24,6 +24,8 @@ char debug_output = 1;
 int cmd_nest_level = 0;
 char *cmd_substitution_buffer;
 size_t cmd_substitution_buffer_index = 0;
+char *pipe_target_buffer;
+size_t pipe_target_buffer_index = 0;
 
 static void sighandler(int signo) {
     if (signo == CMD_ERROR_SIGNAL) {
@@ -175,6 +177,10 @@ void reset_execute_variables() {
     cmd_substitution_buffer_index = 0;
     // Reset command nest level
     cmd_nest_level = 0;
+    // Reset pipe target buffer
+    pipe_target_buffer[0] = '\0';
+    // Reset pipe target buffer index
+    pipe_target_buffer_index = 0;
 }
 
 void free_all() {
@@ -187,6 +193,7 @@ void free_all() {
     free(tok);
     free(opts);
     free(cmd_substitution_buffer);
+    free(pipe_target_buffer);
 }
 
 void parse_input(char input[INPUT_BUF_SIZE]) {
@@ -202,6 +209,8 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
     cmd_nest_level = 0;
     cmd_substitution_buffer = (char *) malloc(CMD_SUBSTITUTION_BUF_SIZE * sizeof(char));
     cmd_substitution_buffer_index = 0;
+    pipe_target_buffer = (char *) malloc(PIPE_TARGET_BUF_SIZE * sizeof(char));
+    pipe_target_buffer_index = 0;
 
     inline char *get_next_keyword(const char *extra_delims) {
         char *keyword = (char *) malloc(sizeof(char));
@@ -258,7 +267,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         return keyword;
     }
 
-    inline int add_last_opt_to_opts_array_and_clear_tok() {
+    inline int add_tok_to_opts_array_and_clear_tok() {
         if (tok[0] != '\0') { // Make sure an argument exists to add
             opts = (char **) realloc(opts, (optCount + 1) * sizeof(char *));
             opts[optCount] = (char *) malloc((strlen(tok) + 1) * sizeof(char));
@@ -295,7 +304,8 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         if ((input[i] != '\n' && input[i] != ' ')
             || (current_state == STATE_IN_SINGLE_QUOTES
                 || current_state == STATE_IN_DOUBLE_QUOTES
-                || current_state == STATE_CMD_SUBSTITUTION)
+                || current_state == STATE_CMD_SUBSTITUTION
+                || current_state == STATE_PIPE)
         ) {
             // State-specific handlers, persist until terminating delimeter
             // If in command substitution state, keep appending to tok
@@ -316,6 +326,16 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     cmd_substitution_buffer[++cmd_substitution_buffer_index] = '\0';
                 }
             }
+            else if (current_state == STATE_PIPE
+                && (strchr(TERM_DELIM_STATE_PIPE, input[i+1]) == NULL
+                    && input[i+1] != '\0')
+            ) {
+                if (pipe_target_buffer_index < PIPE_TARGET_BUF_SIZE - 1) {
+                    // Copy char to pipe target buffer
+                    pipe_target_buffer[pipe_target_buffer_index] = input[i];
+                    pipe_target_buffer[++pipe_target_buffer_index] = '\0';
+                }
+            }
             // Handle escape characters
             else if (input[i] == '\\') {
                 // Add char that follows the escape char to token
@@ -330,7 +350,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     )
             ) {
                 // Execute commands as we parse input
-                add_last_opt_to_opts_array_and_clear_tok();
+                add_tok_to_opts_array_and_clear_tok();
 
                 add_required_null_for_exec();
 
@@ -554,7 +574,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         cmd_error = CMD_ERROR;
                         return;
                     }
-                    if (add_last_opt_to_opts_array_and_clear_tok()) {
+                    if (add_tok_to_opts_array_and_clear_tok()) {
                         if (debug_output) {
                             printf("opt: %s\n", opts[0]);
                             printf("optCount: %d\n", optCount);
@@ -633,7 +653,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                         cmd_error = CMD_ERROR;
                         return;
                     }
-                    if (add_last_opt_to_opts_array_and_clear_tok()) {
+                    if (add_tok_to_opts_array_and_clear_tok()) {
                         if (debug_output) {
                             printf("opt: %s\n", opts[0]);
                             printf("optCount: %d\n", optCount);
@@ -697,6 +717,111 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
                     }
                 }
             }
+            else if (input[i] == '|'
+                || (current_state == STATE_PIPE
+                    && (strchr(TERM_DELIM_STATE_PIPE, input[i+1]) != NULL
+                        || input[i+1] == '\0')
+                    )
+            ) {
+                if (input[i] == '|') {
+                    if (debug_output)
+                        printf("Got |\n");
+                    if (push_state(STATE_PIPE) < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
+                    if (add_tok_to_opts_array_and_clear_tok()) {
+                        if (debug_output) {
+                            printf("opt: %s\n", opts[0]);
+                            printf("optCount: %d\n", optCount);
+                        }
+                    }
+                    while (input[i+1] == ' ') {
+                        // Advance past the optional whitespace following the redirection symbol
+                        ++i;
+                    }
+                }
+                else {
+                    if (pop_state() < 0) {
+                        cmd_error = CMD_ERROR;
+                        return;
+                    }
+                    // Copy current char to pipe_target_buffer to complete target command
+                    if (pipe_target_buffer_index < PIPE_TARGET_BUF_SIZE - 1) {
+                        pipe_target_buffer[pipe_target_buffer_index] = input[i];
+                        pipe_target_buffer[++pipe_target_buffer_index] = '\0';
+                    }
+                    // Reference pipe_target_buffer as target_cmd
+                    char *target_cmd = pipe_target_buffer;
+                    if (debug_output) {
+                        printf("Pipe to command: %s\n", target_cmd);
+                        printf("optCount: %d\n", optCount);
+                        printf("opts[0]: %s\n", opts[0]);
+                    }
+                    add_required_null_for_exec();
+                    int pipes[2];
+                    if (pipe(pipes) < 0) { // Returns -1 if error
+                        print_error();
+                        return;
+                    }
+                    int child_pid = fork();
+                    if (!child_pid) {
+                        close(pipes[0]);
+                        // Redirect stdout to pipes[1]
+                        if (dup2(pipes[1], STDOUT_FILENO) < 0) {
+                            print_error();
+                            exit(PIPE_FAIL_EXIT_CODE);
+                        }
+                        if (execvp(opts[0], opts) < 0) { // Automatically exits on successful exec
+                            print_error();
+                        }
+                        exit(PIPE_FAIL_EXIT_CODE);
+                    }
+                    else {
+                        int status;
+                        waitpid(child_pid, &status, 0);
+                        if (WIFEXITED(status)) {
+                            if (WEXITSTATUS(status) == PIPE_FAIL_EXIT_CODE) {
+                                cmd_error = CMD_ERROR;
+                            }
+                        }
+                        close(pipes[1]);
+                    }
+                    // Check if first command was successful; if not, abort piping
+                    if (cmd_error < 0) {
+                        reset_execute_variables();
+                        return;
+                    }
+                    int child2_pid = fork();
+                    if (!child2_pid) {
+                        // Redirect pipes[0] to stdin
+                        if (dup2(pipes[0], STDIN_FILENO) < 0) {
+                            print_error();
+                            exit(PIPE_FAIL_EXIT_CODE);
+                        }
+                        close(pipes[1]);
+                        // Silence child debug output
+                        debug_output = 0;
+                        parse_input(target_cmd);
+                        free_all();
+                        // TODO may need to remove this for chaining
+                        close(pipes[0]);
+                        exit(cmd_error);
+                    }
+                    else {
+                        int status;
+                        waitpid(child2_pid, &status, 0);
+                        if (WIFEXITED(status)) {
+                            cmd_error = WEXITSTATUS(status);
+                        }
+                        close(pipes[0]);
+                    }
+                    reset_execute_variables();
+                    if (cmd_error >= 0) {
+                        cmd_error = CMD_FINISHED;
+                    }
+                }
+            }
             // Copy char to var tok
             else {
                 copy_current_char_to_tok();
@@ -727,7 +852,7 @@ void parse_input(char input[INPUT_BUF_SIZE]) {
         if (debug_output) {
             printf("Executing standalone command\n");
         }
-        add_last_opt_to_opts_array_and_clear_tok();
+        add_tok_to_opts_array_and_clear_tok();
 
         add_required_null_for_exec();
 

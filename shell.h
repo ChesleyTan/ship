@@ -28,8 +28,10 @@
 #define EOF_EXIT_CODE 10
 #define SIGINT_EXIT_CODE 11
 #define CMD_SUBSTITUTION_FAIL_EXIT_CODE 12
+#define PIPE_FAIL_EXIT_CODE 13
 #define MAX_CMD_SUBSTITUTION_SIZE 1024
 #define CMD_SUBSTITUTION_BUF_SIZE 512
+#define PIPE_TARGET_BUF_SIZE 512
 
 // Shell built-in functions
 static const char *cmd_exit = "exit";
@@ -44,11 +46,13 @@ static const char STATE_CMD_SUBSTITUTION = 3;
 static const char STATE_REDIR_STDOUT_TO_FILE = 4;
 static const char STATE_REDIR_APPEND_STDOUT_TO_FILE = 5;
 static const char STATE_REDIR_FILE_TO_STDIN = 6;
+static const char STATE_PIPE = 7;
 
 // Parsing state terminating delimiters
-static const char *TERM_DELIM_STATE_REDIR_STDOUT_TO_FILE = " ;<>\n";
-static const char *TERM_DELIM_STATE_REDIR_APPEND_STDOUT_TO_FILE = " ;<>\n";
-static const char *TERM_DELIM_STATE_REDIR_FILE_TO_STDIN = " ;<>\n";
+static const char *TERM_DELIM_STATE_REDIR_STDOUT_TO_FILE = " ;<|>\n";
+static const char *TERM_DELIM_STATE_REDIR_APPEND_STDOUT_TO_FILE = " ;<|>\n";
+static const char *TERM_DELIM_STATE_REDIR_FILE_TO_STDIN = " ;<|>\n";
+static const char *TERM_DELIM_STATE_PIPE = ";<|>\n";
 
 // Function type signatures
 static void sighandler(int signo);
@@ -77,4 +81,6 @@ extern char debug_output;
 extern int cmd_nest_level;
 extern char *cmd_substitution_buffer;
 extern size_t cmd_substitution_buffer_index;
+extern char *pipe_target_buffer;
+extern size_t pipe_target_buffer_index;
 
