@@ -1,5 +1,21 @@
 #include "prompt.h"
 
+void abbreviate_home(char *full_path, size_t full_path_length) {
+    // Replace $HOME with ~ in full_path
+    char *match = strstr(full_path, home);
+    if (match != NULL) {
+        int path_size = (strlen(match) - strlen(home) + 2);
+        char *trunc_path = (char *) malloc(path_size * sizeof(char *));
+        trunc_path[0] = '~';
+        trunc_path[1] = '\0';
+        trunc_path = strncat(trunc_path, (char *) &match[strlen(home)], path_size - 2);
+        trunc_path[path_size - 1] = '\0';
+        strncpy(full_path, trunc_path, full_path_length);
+        full_path[full_path_length - 1] = '\0';
+        free(trunc_path);
+    }
+}
+
 char *get_user() {
     uid_t uid = geteuid();
     struct passwd *passwd = getpwuid(uid);

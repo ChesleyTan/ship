@@ -27,6 +27,7 @@ static const char *check = "\001\xe2\x9c\x94\002";
 static const char *delta = "\001\xce\x94\002";
 
 // Function type signatures
+void abbreviate_home(char *full_path, size_t full_path_length);
 char *get_user();
 char *get_uid_symbol();
 char *get_time_str(char *time_str_container);

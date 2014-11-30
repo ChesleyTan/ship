@@ -67,7 +67,6 @@ int restore_stderr();
 int restore_default_fds();
 void cd(const char *target);
 void cd_back();
-void abbreviate_home(char *full_path, size_t full_path_length);
 void execute();
 void reset_global_pipes();
 void reset_execute_variables();
