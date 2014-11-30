@@ -3,6 +3,13 @@ SHIP
 
 A shell written by Chesley Tan and Dmitriy Kagno
 
+## Compilation:
+**NOTE:** This projects depends on the GNU Readline Library<br/>
+(See http://cnswww.cns.cwru.edu/php/chet/readline/rltop.html)<br/>
+### To Compile:
+    $ make
+### To Run:
+    $ make run
 ## Features:
 - Color (256) Prompt
     - Shows current time
