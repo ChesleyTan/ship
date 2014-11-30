@@ -11,7 +11,7 @@ char *tok;
 int optCount, tokIndex;
 char old_pwd[DIR_NAME_MAX_SIZE];
 char keep_alive = 1;
-char debug_output = 1;
+char debug_output = 0;
 int cmd_nest_level = 0;
 char *cmd_substitution_buffer;
 size_t cmd_substitution_buffer_index = 0;

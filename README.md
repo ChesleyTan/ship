@@ -32,7 +32,7 @@ A shell written by Chesley Tan and Dmitriy Kagno
     - Supports chained piping
 - Command substitution using backticks `` ` `` or `$()`
     - Supports nested command substitutions
-- Elegant SIGINT handler
+- Intelligent SIGINT handler
 - Tab completion and command history (Requires GNU Readline Library)
 
 ## TODO - Stuff we didn't have time to finish
